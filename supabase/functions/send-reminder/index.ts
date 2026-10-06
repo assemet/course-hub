@@ -1,5 +1,3 @@
-import { createClient } from "npm:@supabase/supabase-js@2.57.4";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -12,22 +10,17 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN");
-
-    if (!botToken) {
-      return new Response(
-        JSON.stringify({ error: "TELEGRAM_BOT_TOKEN secret is not configured. Set it in your Supabase project secrets." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
-
     const body = await req.json();
     const telegramId = body?.telegram_id;
     const courseTitle = body?.course_title;
+    const botToken = body?.bot_token;
+
+    if (!botToken) {
+      return new Response(
+        JSON.stringify({ error: "bot_token is required." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (!telegramId || !courseTitle) {
       return new Response(

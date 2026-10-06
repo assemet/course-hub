@@ -56,6 +56,7 @@ export async function sendReminderNotification(
       body: JSON.stringify({
         telegram_id: telegramId,
         course_title: courseTitle,
+        bot_token: import.meta.env.VITE_TELEGRAM_BOT_TOKEN,
       }),
     });
 

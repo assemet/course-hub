@@ -3,6 +3,7 @@ import { UserProvider, useUser } from '@/hooks/useUser';
 import { BottomNav, type TabKey } from '@/components/BottomNav';
 import { LoadingScreen } from '@/components/Spinner';
 import { ErrorState } from '@/components/StateViews';
+import { MessageCircle } from 'lucide-react';
 import { StudentHome } from '@/screens/StudentHome';
 import { CourseList } from '@/screens/CourseList';
 import { CoursePage } from '@/screens/CoursePage';
@@ -34,6 +35,19 @@ function AppContent() {
   }, [user]);
 
   if (loading) return <LoadingScreen message="Starting Course Tracker..." />;
+  if (notInTelegram) {
+    return (
+      <div className="min-h-screen bg-slate-50 max-w-lg mx-auto flex flex-col items-center justify-center px-6 text-center">
+        <div className="h-16 w-16 rounded-2xl bg-sky-100 flex items-center justify-center mb-4">
+          <MessageCircle className="h-8 w-8 text-sky-500" />
+        </div>
+        <h1 className="text-xl font-bold text-slate-800 mb-2">Open in Telegram</h1>
+        <p className="text-sm text-slate-500 max-w-xs">
+          Please open this app inside Telegram to use it. Launch the bot from your Telegram chat to get started.
+        </p>
+      </div>
+    );
+  }
   if (error) return <ErrorState message={error} />;
   if (!user) return <ErrorState message="Could not load your profile. Please refresh." />;
 

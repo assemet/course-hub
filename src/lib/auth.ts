@@ -2,16 +2,8 @@ import { supabase } from './supabase';
 import type { User } from './types';
 import { getTelegramUser, type TelegramUserData } from './telegram';
 
-const MOCK_USER: TelegramUserData = {
-  id: 100000002,
-  first_name: 'Jane',
-  last_name: 'Student',
-  username: 'jane_student',
-  photo_url: undefined,
-};
-
-export async function getCurrentTelegramUser(): Promise<TelegramUserData> {
-  return getTelegramUser() ?? MOCK_USER;
+export function getCurrentTelegramUser(): TelegramUserData | null {
+  return getTelegramUser();
 }
 
 export async function getOrCreateUser(telegramData: TelegramUserData): Promise<User> {
