@@ -42,11 +42,43 @@ export async function fetchInactiveStudents(hours = 24): Promise<
 }
 
 export async function sendReminderNotification(
-  _telegramId: number,
-  _courseTitle: string
+  telegramId: number,
+  courseTitle: string
 ): Promise<{ sent: boolean; note: string }> {
-  return {
-    sent: false,
-    note: 'Notification sending is prepared but not wired to a bot yet. Use the Telegram Bot API in Phase 2.',
-  };
+  try {
+    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-reminder`;
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        telegram_id: telegramId,
+        course_title: courseTitle,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      return {
+        sent: false,
+        note: errorBody.error || `Request failed (${response.status})`,
+      };
+    }
+
+    const data = await response.json();
+    if (data.sent) {
+      return { sent: true, note: 'Reminder sent successfully.' };
+    }
+    return {
+      sent: false,
+      note: data.error || 'Failed to send reminder.',
+    };
+  } catch (err) {
+    return {
+      sent: false,
+      note: err instanceof Error ? err.message : 'Network error occurred.',
+    };
+  }
 }
