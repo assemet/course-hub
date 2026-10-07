@@ -11,6 +11,7 @@ interface TelegramWebApp {
   initDataUnsafe: {
     user?: TelegramUserData;
   };
+  platform?: string;
   ready: () => void;
   expand: () => void;
   close: () => void;
@@ -66,7 +67,16 @@ export function getTelegramUser(): TelegramUserData | null {
 }
 
 export function isRunningInTelegram(): boolean {
-  return getTelegramWebApp() !== null;
+  const tg = getTelegramWebApp();
+  if (!tg) return false;
+  // On all Telegram platforms (ios, android, web, desktop, unknown) the
+  // platform property is set. Some older clients may not expose it, so also
+  // accept a non-empty initData or a populated initDataUnsafe.user as proof.
+  return (
+    !!tg.platform ||
+    (typeof tg.initData === 'string' && tg.initData.length > 0) ||
+    !!tg.initDataUnsafe?.user
+  );
 }
 
 export function initTelegramWebApp(): void {

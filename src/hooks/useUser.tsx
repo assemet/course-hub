@@ -28,6 +28,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [notInTelegram, setNotInTelegram] = useState(false);
 
   const loadUser = useCallback(async () => {
+    // Call ready() first — on Telegram Web/Desktop the initDataUnsafe.user
+    // may not be populated until after the WebApp signals it's ready.
+    initTelegramWebApp();
+
     if (!isRunningInTelegram()) {
       setNotInTelegram(true);
       setLoading(false);
@@ -35,7 +39,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      initTelegramWebApp();
       const tgUser = getCurrentTelegramUser();
       if (!tgUser) {
         setNotInTelegram(true);
