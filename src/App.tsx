@@ -21,7 +21,7 @@ type Screen =
   | { name: 'course-editor'; courseId: string | null; isNew: boolean };
 
 function AppContent() {
-  const { user, loading, error } = useUser();
+  const { user, loading, error, notInTelegram } = useUser();
   const [activeTab, setActiveTab] = useState<TabKey>('home');
   const [screenStack, setScreenStack] = useState<Screen[]>([]);
 
