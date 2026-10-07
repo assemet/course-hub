@@ -67,16 +67,12 @@ export function getTelegramUser(): TelegramUserData | null {
 }
 
 export function isRunningInTelegram(): boolean {
-  const tg = getTelegramWebApp();
-  if (!tg) return false;
-  // On all Telegram platforms (ios, android, web, desktop, unknown) the
-  // platform property is set. Some older clients may not expose it, so also
-  // accept a non-empty initData or a populated initDataUnsafe.user as proof.
-  return (
-    !!tg.platform ||
-    (typeof tg.initData === 'string' && tg.initData.length > 0) ||
-    !!tg.initDataUnsafe?.user
-  );
+  // The Telegram WebApp script is only injected by Telegram clients
+  // (ios, android, web, desktop). Its mere presence confirms we're inside
+  // Telegram — do NOT require platform, initData, or initDataUnsafe.user to
+  // be populated, since those can be empty on Web/Desktop depending on how
+  // the app was launched.
+  return getTelegramWebApp() !== null;
 }
 
 export function initTelegramWebApp(): void {
