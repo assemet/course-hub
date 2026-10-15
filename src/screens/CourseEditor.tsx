@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Plus, ChevronDown, ChevronUp, Trash2, Edit2,
   Save, X, Globe, GlobeLock, FileText, Link as LinkIcon, Download, Send,
-  BookOpen, Video, Type, Inbox, GripVertical, CheckCircle2,
+  BookOpen,
 } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { LoadingScreen } from '@/components/Spinner';
@@ -15,33 +15,10 @@ import {
   fetchModulesWithLessons,
   fetchResourcesByLesson,
 } from '@/lib/courseService';
-import { hapticFeedback } from '@/lib/telegram';
-import { fetchPendingImports, importMessageToLesson, deleteImport } from '@/lib/importService';
-import type { Course, ModuleWithLessons, Lesson, Resource, ResourceType, ImportedMessage, ImportMediaType } from '@/lib/types';
+import { hapticFeedback, sanitizeUrl } from '@/lib/telegram';
+import type { Course, ModuleWithLessons, Lesson, Resource, ResourceType } from '@/lib/types';
 
-type EditView = 'overview' | 'modules' | 'imports' | 'lesson';
-
-type DragSource = { type: 'module'; id: string; index: number } | { type: 'lesson'; id: string; moduleId: string; index: number };
-
-const lessonBadgeColors: Record<string, string> = {
-  video: 'bg-red-50 text-red-500',
-  pdf: 'bg-orange-50 text-orange-500',
-  text: 'bg-slate-100 text-slate-500',
-  link: 'bg-blue-50 text-blue-500',
-  telegram: 'bg-cyan-50 text-cyan-500',
-};
-
-function getLessonContentType(lesson: Lesson): { type: string; label: string; icon: typeof FileText } {
-  if (lesson.telegram_url) {
-    const url = lesson.telegram_url.toLowerCase();
-    if (url.includes('youtube.com') || url.includes('youtu.be')) return { type: 'video', label: 'Video', icon: Video };
-    if (url.includes('.pdf')) return { type: 'pdf', label: 'PDF', icon: FileText };
-    if (url.includes('t.me')) return { type: 'telegram', label: 'Telegram', icon: Send };
-    return { type: 'link', label: 'Link', icon: LinkIcon };
-  }
-  if (lesson.content && lesson.content.trim()) return { type: 'text', label: 'Text', icon: Type };
-  return { type: 'text', label: 'Empty', icon: FileText };
-}
+type EditView = 'overview' | 'modules' | 'lesson';
 
 export function CourseEditor({
   courseId,
@@ -57,7 +34,8 @@ export function CourseEditor({
   const [modules, setModules] = useState<ModuleWithLessons[]>([]);
   const [view, setView] = useState<EditView>('overview');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null); // fatal: course couldn't be loaded
+  const [actionError, setActionError] = useState<string | null>(null); // recoverable: a save/delete failed
 
   // Form states
   const [title, setTitle] = useState('');
@@ -88,6 +66,11 @@ export function CourseEditor({
       const c = await fetchCourseById(courseId);
       if (!c) {
         setError('Course not found');
+        setLoading(false);
+        return;
+      }
+      if (c.creator_id !== user.id) {
+        setError('You can only edit your own courses');
         setLoading(false);
         return;
       }
@@ -125,8 +108,18 @@ export function CourseEditor({
   // === Course save ===
   const handleSaveCourse = async () => {
     if (!user || !title.trim()) return;
+    const cleanSlug = slug.trim().toLowerCase();
+    if (cleanSlug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(cleanSlug)) {
+      setActionError('Slug can only contain lowercase letters, numbers and single hyphens');
+      return;
+    }
+    if (coverUrl.trim() && !sanitizeUrl(coverUrl)) {
+      setActionError('Cover image must be a valid http(s) link');
+      return;
+    }
     try {
       setSaving(true);
+      setActionError(null);
       if (course) {
         const { error: updErr } = await supabase
           .from('courses')
@@ -134,11 +127,11 @@ export function CourseEditor({
             title: title.trim(),
             description: description.trim() || null,
             cover_url: coverUrl.trim() || null,
-            slug: slug.trim() || null,
+            slug: cleanSlug || null,
           })
           .eq('id', course.id);
         if (updErr) throw updErr;
-        setCourse({ ...course, title: title.trim(), description: description.trim() || null, cover_url: coverUrl.trim() || null, slug: slug.trim() || null });
+        setCourse({ ...course, title: title.trim(), description: description.trim() || null, cover_url: coverUrl.trim() || null, slug: cleanSlug || null });
       } else {
         const { data, error: insErr } = await supabase
           .from('courses')
@@ -147,7 +140,7 @@ export function CourseEditor({
             title: title.trim(),
             description: description.trim() || null,
             cover_url: coverUrl.trim() || null,
-            slug: slug.trim() || null,
+            slug: cleanSlug || null,
             status: 'draft',
           })
           .select()
@@ -157,7 +150,12 @@ export function CourseEditor({
         setView('modules');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save course');
+      const code = (err as { code?: string } | null)?.code;
+      setActionError(
+        code === '23505'
+          ? 'That slug is already taken — choose another one'
+          : err instanceof Error ? err.message : 'Failed to save course'
+      );
     } finally {
       setSaving(false);
     }
@@ -176,7 +174,7 @@ export function CourseEditor({
       setCourse({ ...course, status: newStatus });
       hapticFeedback('success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update status');
+      setActionError(err instanceof Error ? err.message : 'Failed to update status');
     }
   };
 
@@ -198,7 +196,7 @@ export function CourseEditor({
       setModuleTitleInput('');
       hapticFeedback('light');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add module');
+      setActionError(err instanceof Error ? err.message : 'Failed to add module');
     }
   };
 
@@ -214,7 +212,7 @@ export function CourseEditor({
       setEditingModuleId(null);
       setModuleTitleInput('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to rename module');
+      setActionError(err instanceof Error ? err.message : 'Failed to rename module');
     }
   };
 
@@ -226,7 +224,7 @@ export function CourseEditor({
       setModules(modules.filter((m) => m.id !== moduleId));
       hapticFeedback('warning');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete module');
+      setActionError(err instanceof Error ? err.message : 'Failed to delete module');
     }
   };
 
@@ -239,11 +237,16 @@ export function CourseEditor({
     const newModules = [...modules];
     [newModules[idx], newModules[swapIdx]] = [newModules[swapIdx], newModules[idx]];
 
-    // Update positions
-    for (let i = 0; i < newModules.length; i++) {
-      await supabase.from('modules').update({ position: i }).eq('id', newModules[i].id);
+    try {
+      const results = await Promise.all(
+        newModules.map((m, i) => supabase.from('modules').update({ position: i }).eq('id', m.id))
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) throw failed.error;
+      setModules(newModules);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to reorder modules');
     }
-    setModules(newModules);
   };
 
   // === Lesson CRUD ===
@@ -256,7 +259,12 @@ export function CourseEditor({
     lessonId: string | null;
   }) => {
     if (!course || !lessonData.title.trim()) return;
+    if (lessonData.telegram_url.trim() && !sanitizeUrl(lessonData.telegram_url)) {
+      setActionError('Lesson link must be a valid http(s) or t.me link');
+      return;
+    }
     try {
+      setActionError(null);
       const mod = modules.find((m) => m.id === lessonData.moduleId);
       if (!mod) return;
 
@@ -308,7 +316,7 @@ export function CourseEditor({
       setEditingLesson(null);
       hapticFeedback('light');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save lesson');
+      setActionError(err instanceof Error ? err.message : 'Failed to save lesson');
     }
   };
 
@@ -322,7 +330,7 @@ export function CourseEditor({
       ));
       hapticFeedback('warning');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete lesson');
+      setActionError(err instanceof Error ? err.message : 'Failed to delete lesson');
     }
   };
 
@@ -337,18 +345,27 @@ export function CourseEditor({
     const newLessons = [...mod.lessons];
     [newLessons[idx], newLessons[swapIdx]] = [newLessons[swapIdx], newLessons[idx]];
 
-    for (let i = 0; i < newLessons.length; i++) {
-      await supabase.from('lessons').update({ position: i }).eq('id', newLessons[i].id);
+    try {
+      const results = await Promise.all(
+        newLessons.map((l, i) => supabase.from('lessons').update({ position: i }).eq('id', l.id))
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) throw failed.error;
+      setModules(modules.map((m) =>
+        m.id === moduleId ? { ...m, lessons: newLessons } : m
+      ));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to reorder lessons');
     }
-
-    setModules(modules.map((m) =>
-      m.id === moduleId ? { ...m, lessons: newLessons } : m
-    ));
   };
 
   // === Resource CRUD ===
   const handleAddResource = async (lessonId: string, resource: { title: string; type: ResourceType; url: string; description: string }) => {
     if (!resource.title.trim() || !resource.url.trim()) return;
+    if (!sanitizeUrl(resource.url)) {
+      setActionError('Resource link must be a valid http(s) or t.me link');
+      return;
+    }
     try {
       const { data, error: err } = await supabase
         .from('resources')
@@ -372,7 +389,7 @@ export function CourseEditor({
       hapticFeedback('light');
       return data;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add resource');
+      setActionError(err instanceof Error ? err.message : 'Failed to add resource');
     }
   };
 
@@ -382,7 +399,7 @@ export function CourseEditor({
       if (err) throw err;
       hapticFeedback('warning');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete resource');
+      setActionError(err instanceof Error ? err.message : 'Failed to delete resource');
     }
   };
 
@@ -434,6 +451,17 @@ export function CourseEditor({
       )}
 
       <div className="px-4 py-5 space-y-5 pb-24">
+        {actionError && (
+          <div
+            role="alert"
+            className="flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          >
+            <span>{actionError}</span>
+            <button onClick={() => setActionError(null)} aria-label="Dismiss" className="flex-shrink-0">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         {view === 'overview' && (
           <div className="space-y-4">
             <Card className="p-5 space-y-4">

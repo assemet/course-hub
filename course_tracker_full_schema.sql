@@ -1,3 +1,8 @@
+-- !!! DEPRECATED / DEMO ONLY !!!
+-- This script creates permissive `USING (true)` policies for the public anon key,
+-- which lets anyone read, modify and delete all data. Do NOT run it on a real
+-- project. Use supabase/migrations/ (including *_004_lock_down_rls.sql) instead.
+
 -- ============================================================
 -- Course Tracker — Complete Database Schema & Seed Data
 -- ============================================================

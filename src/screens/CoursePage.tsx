@@ -15,8 +15,9 @@ import {
   calculateProgress,
   updateLastLesson,
   fetchCreatorName,
+  getLessonState,
 } from '@/lib/courseService';
-import type { Course, ModuleWithLessons, LessonProgress, LessonState } from '@/lib/types';
+import type { Course, ModuleWithLessons, LessonProgress, Enrollment } from '@/lib/types';
 import { buildCourseDeepLink } from '@/lib/deepLink';
 
 export function CoursePage({
@@ -32,6 +33,7 @@ export function CoursePage({
   const [course, setCourse] = useState<Course | null>(null);
   const [modules, setModules] = useState<ModuleWithLessons[]>([]);
   const [progressList, setProgressList] = useState<LessonProgress[]>([]);
+  const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [creatorName, setCreatorName] = useState<string>('');
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -58,9 +60,11 @@ export function CoursePage({
         fetchEnrollment(user.id, courseId),
       ]);
 
-      if (!existingEnrollment) {
-        await createEnrollment(user.id, courseId);
-      }
+      // Creators previewing their own course shouldn't count as students.
+      const activeEnrollment =
+        existingEnrollment ??
+        (c.creator_id === user.id ? null : await createEnrollment(user.id, courseId));
+      setEnrollment(activeEnrollment);
 
       setModules(mods);
       setProgressList(lp);
@@ -95,16 +99,27 @@ export function CoursePage({
 
   const handleLessonClick = async (lessonId: string) => {
     if (!user) return;
-    await updateLastLesson(user.id, courseId, lessonId);
+    try {
+      await updateLastLesson(user.id, courseId, lessonId);
+    } catch {
+      // Tracking the last lesson is best-effort; never block opening it.
+    }
     onOpenLesson(courseId, lessonId);
   };
 
   const handleCopyLink = () => {
     if (!course) return;
     const link = buildCourseDeepLink(course.id);
-    navigator.clipboard?.writeText(link);
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2000);
+    navigator.clipboard
+      ?.writeText(link)
+      .then(() => {
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+      })
+      .catch(() => {
+        // Clipboard can be unavailable inside some Telegram webviews.
+        window.prompt('Copy this link:', link);
+      });
   };
 
   if (loading) return (
@@ -127,10 +142,7 @@ export function CoursePage({
   const progress = calculateProgress(modules, progressList);
   const totalModules = modules.length;
 
-  const getLessonState = (lessonId: string): LessonState => {
-    if (completedSet.has(lessonId)) return 'completed';
-    return 'not_started';
-  };
+  const lastLessonId = enrollment?.last_lesson_id ?? null;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -223,7 +235,7 @@ export function CoursePage({
                     ) : (
                       <div className="divide-y divide-slate-100">
                         {module.lessons.map((lesson, lIdx) => {
-                          const state = getLessonState(lesson.id);
+                          const state = getLessonState(lesson.id, completedSet, lastLessonId);
                           return (
                             <button
                               key={lesson.id}

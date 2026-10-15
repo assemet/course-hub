@@ -1,3 +1,5 @@
+import { getTelegramStartParam } from './telegram';
+
 const BOT_USERNAME = 'course_tracker_bot';
 
 export function buildCourseDeepLink(courseId: string): string {
@@ -12,10 +14,11 @@ export function parseStartAppParam(startApp: string | null): { courseId: string 
 }
 
 export function getDeepLinkCourseId(): string | null {
-  const tg = window.Telegram?.WebApp;
-  if (tg?.initDataUnsafe) {
-    // startapp param is not directly accessible via SDK; check URL params
-  }
+  // Preferred: the SDK exposes the `startapp` value as start_param.
+  const sdkParam = parseStartAppParam(getTelegramStartParam());
+  if (sdkParam) return sdkParam.courseId;
+
+  // Fallbacks for clients that only pass it through the launch URL.
 
   const urlParams = new URLSearchParams(window.location.search);
   const tgWebAppStartParam = urlParams.get('tgWebAppStartParam');

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { User as UserIcon, ArrowLeftRight, Info, Bell, Shield } from 'lucide-react';
+import { ArrowLeftRight, Info, Bell, Shield } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { useUser } from '@/hooks/useUser';
 import { isRunningInTelegram } from '@/lib/telegram';

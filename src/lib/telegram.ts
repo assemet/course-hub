@@ -10,6 +10,7 @@ interface TelegramWebApp {
   initData: string;
   initDataUnsafe: {
     user?: TelegramUserData;
+    start_param?: string;
   };
   platform?: string;
   ready: () => void;
@@ -66,6 +67,15 @@ export function getTelegramUser(): TelegramUserData | null {
   return null;
 }
 
+/** Raw signed initData string; must be verified server-side, never trusted as-is. */
+export function getTelegramInitData(): string {
+  return getTelegramWebApp()?.initData ?? '';
+}
+
+export function getTelegramStartParam(): string | null {
+  return getTelegramWebApp()?.initDataUnsafe?.start_param ?? null;
+}
+
 export function isRunningInTelegram(): boolean {
   // The Telegram WebApp script is only injected by Telegram clients
   // (ios, android, web, desktop). Its mere presence confirms we're inside
@@ -99,20 +109,41 @@ export function hapticFeedback(type: 'light' | 'medium' | 'heavy' | 'success' | 
   }
 }
 
-export function openTelegramLink(url: string): void {
-  const tg = getTelegramWebApp();
-  if (tg) {
-    tg.openTelegramLink(url);
-  } else {
-    window.open(url, '_blank');
+/** Returns a normalized http(s) URL, or null for anything else (javascript:, data:, ...). */
+export function sanitizeUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.toString() : null;
+  } catch {
+    return null;
   }
 }
 
+function isTelegramLink(url: string): boolean {
+  const host = new URL(url).hostname;
+  return host === 't.me' || host === 'telegram.me' || host.endsWith('.t.me');
+}
+
 export function openExternalLink(url: string): void {
+  const safe = sanitizeUrl(url);
+  if (!safe) return;
   const tg = getTelegramWebApp();
   if (tg) {
-    tg.openLink(url);
+    tg.openLink(safe);
   } else {
-    window.open(url, '_blank');
+    window.open(safe, '_blank', 'noopener,noreferrer');
+  }
+}
+
+export function openTelegramLink(url: string): void {
+  const safe = sanitizeUrl(url);
+  if (!safe) return;
+  const tg = getTelegramWebApp();
+  // openTelegramLink only accepts t.me links; anything else goes to the browser.
+  if (tg && isTelegramLink(safe)) {
+    tg.openTelegramLink(safe);
+  } else {
+    openExternalLink(safe);
   }
 }

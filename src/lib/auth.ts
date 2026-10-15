@@ -1,55 +1,11 @@
 import { supabase } from './supabase';
+import { signIn } from './session';
 import type { User } from './types';
-import { getTelegramUser, type TelegramUserData } from './telegram';
 
-export function getCurrentTelegramUser(): TelegramUserData | null {
-  return getTelegramUser();
-}
-
-export async function getOrCreateUser(telegramData: TelegramUserData): Promise<User> {
-  const { data: existing } = await supabase
-    .from('users')
-    .select('*')
-    .eq('telegram_id', telegramData.id)
-    .maybeSingle();
-
-  if (existing) {
-    const needsUpdate =
-      existing.first_name !== (telegramData.first_name ?? 'Student') ||
-      existing.username !== (telegramData.username ?? null) ||
-      existing.photo_url !== (telegramData.photo_url ?? null);
-
-    if (needsUpdate) {
-      const { data: updated, error } = await supabase
-        .from('users')
-        .update({
-          first_name: telegramData.first_name ?? existing.first_name,
-          username: telegramData.username ?? null,
-          photo_url: telegramData.photo_url ?? null,
-        })
-        .eq('id', existing.id)
-        .select()
-        .single();
-      if (error) throw error;
-      return updated as User;
-    }
-    return existing as User;
-  }
-
-  const { data: created, error } = await supabase
-    .from('users')
-    .insert({
-      telegram_id: telegramData.id,
-      username: telegramData.username ?? null,
-      first_name: telegramData.first_name ?? 'Student',
-      photo_url: telegramData.photo_url ?? null,
-      role: 'student',
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return created as User;
+/** Signs in with Telegram (verified server-side) and returns the app user. */
+export async function signInWithTelegram(): Promise<User> {
+  const { user } = await signIn();
+  return user;
 }
 
 export async function switchRole(userId: string, role: 'student' | 'creator'): Promise<void> {

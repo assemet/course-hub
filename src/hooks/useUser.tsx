@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import type { User } from '@/lib/types';
-import { getCurrentTelegramUser, getOrCreateUser, switchRole } from '@/lib/auth';
-import { initTelegramWebApp, isRunningInTelegram, getTelegramUser } from '@/lib/telegram';
+import { signInWithTelegram, switchRole } from '@/lib/auth';
+import { initTelegramWebApp, isRunningInTelegram, getTelegramInitData } from '@/lib/telegram';
 
 interface UserContextValue {
   user: User | null;
@@ -21,24 +21,21 @@ const UserContext = createContext<UserContextValue>({
   refreshUser: async () => {},
 });
 
-import type { TelegramUserData } from '@/lib/telegram';
-
-// On Telegram Web/Desktop, initDataUnsafe.user may not be populated
-// immediately — poll for up to ~3 seconds after ready() is called.
+// On Telegram Web/Desktop, initData may not be populated immediately —
+// poll for up to ~3 seconds after ready() is called.
 const POLL_INTERVAL_MS = 200;
 const POLL_TIMEOUT_MS = 3000;
 
-function waitForTelegramUser(): Promise<TelegramUserData | null> {
+function waitForInitData(): Promise<boolean> {
   return new Promise((resolve) => {
     const start = Date.now();
     const check = () => {
-      const user = getTelegramUser();
-      if (user) {
-        resolve(user);
+      if (getTelegramInitData()) {
+        resolve(true);
         return;
       }
       if (Date.now() - start >= POLL_TIMEOUT_MS) {
-        resolve(null);
+        resolve(false);
         return;
       }
       setTimeout(check, POLL_INTERVAL_MS);
@@ -65,15 +62,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // We're inside Telegram but user data might not be populated yet.
+      // We're inside Telegram but initData might not be populated yet.
       // Poll for it rather than immediately showing the fallback screen.
-      const tgUser = await waitForTelegramUser();
-      if (!tgUser) {
+      const hasInitData = await waitForInitData();
+      if (!hasInitData) {
         setNotInTelegram(true);
         setLoading(false);
         return;
       }
-      const dbUser = await getOrCreateUser(tgUser);
+      // The signed initData is verified server-side; the client never decides identity.
+      const dbUser = await signInWithTelegram();
       setUser(dbUser);
       setNotInTelegram(false);
     } catch (err) {
@@ -91,12 +89,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     const newRole = user.role === 'student' ? 'creator' : 'student';
     await switchRole(user.id, newRole);
-    setUser({ ...user, role: newRole });
+    setUser((current) => (current ? { ...current, role: newRole } : current));
   }, [user]);
 
   const refreshUser = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setNotInTelegram(false);
     await loadUser();
   }, [loadUser]);
 
@@ -107,6 +106,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useUser() {
   return useContext(UserContext);
 }

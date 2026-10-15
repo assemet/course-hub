@@ -52,6 +52,7 @@ export function LessonPage({
   const [error, setError] = useState<string | null>(null);
   const [marking, setMarking] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -109,13 +110,15 @@ export function LessonPage({
     if (!user || completed || marking) return;
     try {
       setMarking(true);
+      setActionError(null);
       await markLessonComplete(user.id, courseId, lessonId);
       setCompleted(true);
       setShowSuccess(true);
       hapticFeedback('success');
       setTimeout(() => setShowSuccess(false), 2500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to mark lesson as complete');
+      // Keep the lesson on screen; a failed save shouldn't throw the learner out of it.
+      setActionError(err instanceof Error ? err.message : 'Failed to mark lesson as complete');
     } finally {
       setMarking(false);
     }
@@ -261,10 +264,15 @@ export function LessonPage({
       {/* Complete button — fixed bottom */}
       <div className="fixed bottom-0 left-0 right-0 z-20 bg-white/90 backdrop-blur-md border-t border-slate-200/60 px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
         <div className="max-w-lg mx-auto">
+          {actionError && (
+            <div role="alert" className="mb-2 text-center text-sm text-red-600">
+              {actionError}
+            </div>
+          )}
           {showSuccess && (
             <div className="mb-2 flex items-center justify-center gap-1.5 text-green-600 text-sm font-medium animate-pulse">
               <CheckCircle2 className="h-4 w-4" />
-              Lesson completed! Next lesson is ready.
+              {nextLesson ? 'Lesson completed! Next lesson is ready.' : 'Lesson completed!'}
             </div>
           )}
           <button

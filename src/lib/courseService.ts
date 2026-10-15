@@ -100,20 +100,20 @@ export async function fetchEnrollment(userId: string, courseId: string): Promise
 }
 
 export async function createEnrollment(userId: string, courseId: string): Promise<Enrollment> {
-  const { data: existing } = await supabase
-    .from('enrollments')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('course_id', courseId)
-    .maybeSingle();
-  if (existing) return existing as Enrollment;
-
   const { data, error } = await supabase
     .from('enrollments')
     .insert({ user_id: userId, course_id: courseId })
     .select()
     .single();
-  if (error) throw error;
+
+  if (error) {
+    // 23505 = unique_violation: already enrolled (or a concurrent request won the race).
+    if (error.code === '23505') {
+      const existing = await fetchEnrollment(userId, courseId);
+      if (existing) return existing;
+    }
+    throw error;
+  }
   return data as Enrollment;
 }
 
@@ -146,31 +146,17 @@ export async function markLessonComplete(
   courseId: string,
   lessonId: string
 ): Promise<void> {
-  const { data: existing } = await supabase
-    .from('lesson_progress')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('lesson_id', lessonId)
-    .maybeSingle();
-
-  if (existing) {
-    const { error } = await supabase
-      .from('lesson_progress')
-      .update({ completed: true, completed_at: new Date().toISOString() })
-      .eq('id', existing.id);
-    if (error) throw error;
-  } else {
-    const { error } = await supabase
-      .from('lesson_progress')
-      .insert({
-        user_id: userId,
-        course_id: courseId,
-        lesson_id: lessonId,
-        completed: true,
-        completed_at: new Date().toISOString(),
-      });
-    if (error) throw error;
-  }
+  const { error } = await supabase.from('lesson_progress').upsert(
+    {
+      user_id: userId,
+      course_id: courseId,
+      lesson_id: lessonId,
+      completed: true,
+      completed_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id,lesson_id' }
+  );
+  if (error) throw error;
 
   await updateLastLesson(userId, courseId, lessonId);
 }
@@ -204,12 +190,10 @@ export function getAllLessonsOrdered(modules: ModuleWithLessons[]): Lesson[] {
 export function getLessonState(
   lessonId: string,
   completedSet: Set<string>,
-  lastLessonId: string | null,
-  allLessons: Lesson[]
+  lastLessonId: string | null
 ): 'not_started' | 'in_progress' | 'completed' {
   if (completedSet.has(lessonId)) return 'completed';
   if (lastLessonId === lessonId) return 'in_progress';
-  // If there's a last lesson and this lesson comes right after it, it's "next" = in progress concept
   return 'not_started';
 }
 
@@ -223,12 +207,16 @@ export async function findNextLesson(
 
   if (lastLessonId) {
     const idx = allLessons.findIndex((l) => l.id === lastLessonId);
-    if (idx >= 0 && idx + 1 < allLessons.length) {
-      return allLessons[idx + 1];
+    if (idx >= 0) {
+      // Opened but not finished: resume it rather than skipping ahead.
+      if (!completedSet.has(lastLessonId)) return allLessons[idx];
+
+      // Finished: continue with the next unfinished lesson after it.
+      const following = allLessons.slice(idx + 1).find((l) => !completedSet.has(l.id));
+      if (following) return following;
     }
   }
 
-  // Find first uncompleted lesson
   const firstUncompleted = allLessons.find((l) => !completedSet.has(l.id));
   if (firstUncompleted) return firstUncompleted;
 
@@ -254,13 +242,19 @@ export async function fetchEnrolledCoursesWithProgress(userId: string): Promise<
     .eq('status', 'published');
   if (error) throw error;
 
-  const result: Array<{ course: Course; progress: CourseProgress; enrollment: Enrollment }> = [];
-  for (const enrollment of enrollments) {
+  const entries = enrollments.flatMap((enrollment) => {
     const course = (courses as Course[]).find((c) => c.id === enrollment.course_id);
-    if (!course) continue;
-    const progress = await getCourseProgressForUser(userId, course.id);
-    result.push({ course, progress, enrollment });
-  }
+    return course ? [{ course, enrollment }] : [];
+  });
+
+  // Load every course's progress in parallel instead of one after another.
+  const result = await Promise.all(
+    entries.map(async ({ course, enrollment }) => ({
+      course,
+      enrollment,
+      progress: await getCourseProgressForUser(userId, course.id),
+    }))
+  );
 
   // Sort by last activity descending
   result.sort((a, b) =>

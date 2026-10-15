@@ -1,5 +1,13 @@
+# send-reminder authenticates the caller itself (Telegram initData), so the
+# gateway only needs to accept the project's anon key.
 [functions.send-reminder]
 verify_jwt = true
 
+# Called by Telegram, which cannot send a Supabase JWT. Protected instead by the
+# X-Telegram-Bot-Api-Secret-Token header (TELEGRAM_WEBHOOK_SECRET).
 [functions.telegram-webhook]
+verify_jwt = false
+
+# Called before the user has a session; it verifies Telegram initData and mints one.
+[functions.auth-telegram]
 verify_jwt = false

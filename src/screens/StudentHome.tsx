@@ -10,9 +10,8 @@ import {
   fetchModulesWithLessons,
   fetchLessonProgress,
   findNextLesson,
-  getAllLessonsOrdered,
 } from '@/lib/courseService';
-import type { Course, CourseProgress, Enrollment, Lesson, ModuleWithLessons } from '@/lib/types';
+import type { Course, CourseProgress, Enrollment, Lesson } from '@/lib/types';
 
 interface ContinueLearningData {
   course: Course;

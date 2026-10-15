@@ -38,17 +38,17 @@ export function CreatorDashboard({
       const myCourses = await fetchCoursesByCreator(user.id);
       setCourses(myCourses);
 
-      const statsMap: Record<string, CourseStats> = {};
-      for (const course of myCourses) {
-        const modules = await fetchModulesWithLessons(course.id);
-        const lessonCount = modules.reduce((sum, m) => sum + m.lessons.length, 0);
-        const studentCount = await countEnrollmentsForCourse(course.id);
-        statsMap[course.id] = {
-          moduleCount: modules.length,
-          lessonCount,
-          studentCount,
-        };
-      }
+      const entries = await Promise.all(
+        myCourses.map(async (course) => {
+          const [modules, studentCount] = await Promise.all([
+            fetchModulesWithLessons(course.id),
+            countEnrollmentsForCourse(course.id),
+          ]);
+          const lessonCount = modules.reduce((sum, m) => sum + m.lessons.length, 0);
+          return [course.id, { moduleCount: modules.length, lessonCount, studentCount }] as const;
+        })
+      );
+      const statsMap: Record<string, CourseStats> = Object.fromEntries(entries);
       setStats(statsMap);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard');

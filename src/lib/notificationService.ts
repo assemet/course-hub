@@ -1,16 +1,17 @@
 import { supabase } from './supabase';
+import { getTelegramInitData } from './telegram';
 
-export async function fetchInactiveStudents(hours = 24): Promise<
-  Array<{
-    user_id: string;
-    course_id: string;
-    telegram_id: number;
-    first_name: string;
-    username: string | null;
-    last_activity_at: string;
-    course_title: string;
-  }>
-> {
+export interface InactiveStudent {
+  user_id: string;
+  course_id: string;
+  first_name: string;
+  username: string | null;
+  last_activity_at: string;
+  course_title: string;
+}
+
+/** Students enrolled in the creator's courses with no activity for `hours`. */
+export async function fetchInactiveStudents(creatorId: string, hours = 24): Promise<InactiveStudent[]> {
   const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
   const { data, error } = await supabase
@@ -19,20 +20,20 @@ export async function fetchInactiveStudents(hours = 24): Promise<
       user_id,
       course_id,
       last_activity_at,
-      users!inner ( telegram_id, first_name, username ),
-      courses!inner ( title )
+      users!inner ( first_name, username ),
+      courses!inner ( title, creator_id )
     `)
+    .eq('courses.creator_id', creatorId)
     .lt('last_activity_at', cutoff);
 
   if (error) throw error;
 
   return (data ?? []).map((row: Record<string, unknown>) => {
-    const user = row.users as { telegram_id: number; first_name: string; username: string | null };
+    const user = row.users as { first_name: string; username: string | null };
     const course = row.courses as { title: string };
     return {
       user_id: row.user_id as string,
       course_id: row.course_id as string,
-      telegram_id: user.telegram_id,
       first_name: user.first_name,
       username: user.username,
       last_activity_at: row.last_activity_at as string,
@@ -41,41 +42,35 @@ export async function fetchInactiveStudents(hours = 24): Promise<
   });
 }
 
+/**
+ * Asks the server to message an enrolled student. The bot token stays on the
+ * server; the caller is verified from Telegram initData and must own the course.
+ */
 export async function sendReminderNotification(
-  telegramId: number,
-  courseTitle: string
+  courseId: string,
+  studentUserId: string
 ): Promise<{ sent: boolean; note: string }> {
   try {
-    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-reminder`;
-    const response = await fetch(apiUrl, {
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-reminder`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        telegram_id: telegramId,
-        course_title: courseTitle,
-        bot_token: import.meta.env.VITE_TELEGRAM_BOT_TOKEN,
+        init_data: getTelegramInitData(),
+        course_id: courseId,
+        student_id: studentUserId,
       }),
     });
 
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({}));
-      return {
-        sent: false,
-        note: errorBody.error || `Request failed (${response.status})`,
-      };
-    }
-
-    const data = await response.json();
-    if (data.sent) {
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data.sent) {
       return { sent: true, note: 'Reminder sent successfully.' };
     }
-    return {
-      sent: false,
-      note: data.error || 'Failed to send reminder.',
-    };
+    return { sent: false, note: data.error || `Request failed (${response.status})` };
   } catch (err) {
     return {
       sent: false,
