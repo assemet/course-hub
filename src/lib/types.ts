@@ -92,3 +92,18 @@ export interface CourseProgress {
 }
 
 export type LessonState = 'not_started' | 'in_progress' | 'completed';
+
+export type ImportMediaType = 'video' | 'pdf' | 'text' | 'link' | 'image' | 'file';
+export type ImportStatus = 'pending' | 'imported';
+
+export interface ImportedMessage {
+  id: string;
+  creator_id: string;
+  telegram_message_id: number;
+  raw_content: string | null;
+  parsed_title: string | null;
+  media_type: ImportMediaType;
+  media_url: string | null;
+  status: ImportStatus;
+  created_at: string;
+}

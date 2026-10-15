@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Plus, ChevronDown, ChevronUp, Trash2, Edit2,
   Save, X, Globe, GlobeLock, FileText, Link as LinkIcon, Download, Send,
-  BookOpen,
+  BookOpen, Video, Type, Inbox, GripVertical, CheckCircle2,
 } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { LoadingScreen } from '@/components/Spinner';
@@ -16,9 +16,32 @@ import {
   fetchResourcesByLesson,
 } from '@/lib/courseService';
 import { hapticFeedback } from '@/lib/telegram';
-import type { Course, ModuleWithLessons, Lesson, Resource, ResourceType } from '@/lib/types';
+import { fetchPendingImports, importMessageToLesson, deleteImport } from '@/lib/importService';
+import type { Course, ModuleWithLessons, Lesson, Resource, ResourceType, ImportedMessage, ImportMediaType } from '@/lib/types';
 
-type EditView = 'overview' | 'modules' | 'lesson';
+type EditView = 'overview' | 'modules' | 'imports' | 'lesson';
+
+type DragSource = { type: 'module'; id: string; index: number } | { type: 'lesson'; id: string; moduleId: string; index: number };
+
+const lessonBadgeColors: Record<string, string> = {
+  video: 'bg-red-50 text-red-500',
+  pdf: 'bg-orange-50 text-orange-500',
+  text: 'bg-slate-100 text-slate-500',
+  link: 'bg-blue-50 text-blue-500',
+  telegram: 'bg-cyan-50 text-cyan-500',
+};
+
+function getLessonContentType(lesson: Lesson): { type: string; label: string; icon: typeof FileText } {
+  if (lesson.telegram_url) {
+    const url = lesson.telegram_url.toLowerCase();
+    if (url.includes('youtube.com') || url.includes('youtu.be')) return { type: 'video', label: 'Video', icon: Video };
+    if (url.includes('.pdf')) return { type: 'pdf', label: 'PDF', icon: FileText };
+    if (url.includes('t.me')) return { type: 'telegram', label: 'Telegram', icon: Send };
+    return { type: 'link', label: 'Link', icon: LinkIcon };
+  }
+  if (lesson.content && lesson.content.trim()) return { type: 'text', label: 'Text', icon: Type };
+  return { type: 'text', label: 'Empty', icon: FileText };
+}
 
 export function CourseEditor({
   courseId,
