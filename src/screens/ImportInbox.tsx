@@ -9,6 +9,7 @@ import { ErrorState, EmptyState } from '@/components/StateViews';
 import { AppHeader } from '@/components/AppHeader';
 import { useUser } from '@/hooks/useUser';
 import { useI18n, type TKey } from '@/lib/i18n';
+import { errorMessage } from '@/lib/errors';
 import { fetchPendingImports, deleteImport, importMessageToLesson } from '@/lib/importService';
 import { fetchCoursesByCreator, fetchModulesWithLessons } from '@/lib/courseService';
 import { hapticFeedback, openTelegramLink } from '@/lib/telegram';
@@ -72,7 +73,7 @@ export function ImportInbox({ onBack }: { onBack: () => void }) {
       setModulesMap(Object.fromEntries(myCourses.map((c, i) => [c.id, moduleLists[i]])));
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('inbox.loadFailed'));
+      setError(errorMessage(err, t('inbox.loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -109,7 +110,7 @@ export function ImportInbox({ onBack }: { onBack: () => void }) {
       setJustImported(true);
       setTimeout(() => setJustImported(false), 2000);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('inbox.importFailed'));
+      setActionError(errorMessage(err, t('inbox.importFailed')));
       hapticFeedback('error');
     } finally {
       setImporting(null);
@@ -124,7 +125,7 @@ export function ImportInbox({ onBack }: { onBack: () => void }) {
       setImports((list) => list.filter((m) => m.id !== msgId));
       hapticFeedback('warning');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('inbox.deleteFailed'));
+      setActionError(errorMessage(err, t('inbox.deleteFailed')));
     }
   };
 

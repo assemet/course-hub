@@ -14,6 +14,7 @@ import {
   createEnrollment,
 } from '@/lib/courseService';
 import { useI18n } from '@/lib/i18n';
+import { errorMessage } from '@/lib/errors';
 import type { Course, CourseProgress } from '@/lib/types';
 
 export function CourseList({ onOpenCourse }: { onOpenCourse: (courseId: string) => void }) {
@@ -46,7 +47,7 @@ export function CourseList({ onOpenCourse }: { onOpenCourse: (courseId: string) 
       }
       setProgressMap(progressEntries);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('courses.loadFailed'));
+      setError(errorMessage(err, t('courses.loadFailed')));
     } finally {
       setLoading(false);
     }

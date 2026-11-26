@@ -17,6 +17,7 @@ import {
 } from '@/lib/courseService';
 import { hapticFeedback, sanitizeUrl } from '@/lib/telegram';
 import { useI18n, type TKey } from '@/lib/i18n';
+import { errorMessage } from '@/lib/errors';
 import type { Course, ModuleWithLessons, Lesson, Resource, ResourceType } from '@/lib/types';
 
 type EditView = 'overview' | 'modules' | 'lesson';
@@ -88,7 +89,7 @@ export function CourseEditor({
         setExpandedModules(new Set([mods[0].id]));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('course.loadFailed'));
+      setError(errorMessage(err, t('course.loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -156,7 +157,7 @@ export function CourseEditor({
       setActionError(
         code === '23505'
           ? t('editor.slugTaken')
-          : err instanceof Error ? err.message : t('editor.saveFailed')
+          : errorMessage(err, t('editor.saveFailed'))
       );
     } finally {
       setSaving(false);
@@ -176,7 +177,7 @@ export function CourseEditor({
       setCourse({ ...course, status: newStatus });
       hapticFeedback('success');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('editor.statusFailed'));
+      setActionError(errorMessage(err, t('editor.statusFailed')));
     }
   };
 
@@ -198,7 +199,7 @@ export function CourseEditor({
       setModuleTitleInput('');
       hapticFeedback('light');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('editor.addModuleFailed'));
+      setActionError(errorMessage(err, t('editor.addModuleFailed')));
     }
   };
 
@@ -214,7 +215,7 @@ export function CourseEditor({
       setEditingModuleId(null);
       setModuleTitleInput('');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('editor.renameModuleFailed'));
+      setActionError(errorMessage(err, t('editor.renameModuleFailed')));
     }
   };
 
@@ -226,7 +227,7 @@ export function CourseEditor({
       setModules(modules.filter((m) => m.id !== moduleId));
       hapticFeedback('warning');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('editor.deleteModuleFailed'));
+      setActionError(errorMessage(err, t('editor.deleteModuleFailed')));
     }
   };
 
@@ -247,7 +248,7 @@ export function CourseEditor({
       if (failed?.error) throw failed.error;
       setModules(newModules);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('editor.reorderModulesFailed'));
+      setActionError(errorMessage(err, t('editor.reorderModulesFailed')));
     }
   };
 
@@ -318,7 +319,7 @@ export function CourseEditor({
       setEditingLesson(null);
       hapticFeedback('light');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('editor.saveLessonFailed'));
+      setActionError(errorMessage(err, t('editor.saveLessonFailed')));
     }
   };
 
@@ -332,7 +333,7 @@ export function CourseEditor({
       ));
       hapticFeedback('warning');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('editor.deleteLessonFailed'));
+      setActionError(errorMessage(err, t('editor.deleteLessonFailed')));
     }
   };
 
@@ -357,7 +358,7 @@ export function CourseEditor({
         m.id === moduleId ? { ...m, lessons: newLessons } : m
       ));
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('editor.reorderLessonsFailed'));
+      setActionError(errorMessage(err, t('editor.reorderLessonsFailed')));
     }
   };
 
@@ -391,7 +392,7 @@ export function CourseEditor({
       hapticFeedback('light');
       return data;
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('editor.addResourceFailed'));
+      setActionError(errorMessage(err, t('editor.addResourceFailed')));
     }
   };
 
@@ -401,7 +402,7 @@ export function CourseEditor({
       if (err) throw err;
       hapticFeedback('warning');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('editor.deleteResourceFailed'));
+      setActionError(errorMessage(err, t('editor.deleteResourceFailed')));
     }
   };
 

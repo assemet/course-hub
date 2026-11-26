@@ -16,6 +16,7 @@ import {
 } from '@/lib/courseService';
 import { openTelegramLink, openExternalLink, hapticFeedback } from '@/lib/telegram';
 import { useI18n, type TKey } from '@/lib/i18n';
+import { errorMessage } from '@/lib/errors';
 import type { Course, Lesson, Resource, ModuleWithLessons } from '@/lib/types';
 
 const resourceIcons: Record<string, typeof FileIcon> = {
@@ -93,7 +94,7 @@ export function LessonPage({
 
       await updateLastLesson(user.id, courseId, lessonId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('lesson.loadFailed'));
+      setError(errorMessage(err, t('lesson.loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -120,7 +121,7 @@ export function LessonPage({
       setTimeout(() => setShowSuccess(false), 2500);
     } catch (err) {
       // Keep the lesson on screen; a failed save shouldn't throw the learner out of it.
-      setActionError(err instanceof Error ? err.message : t('lesson.markFailed'));
+      setActionError(errorMessage(err, t('lesson.markFailed')));
     } finally {
       setMarking(false);
     }

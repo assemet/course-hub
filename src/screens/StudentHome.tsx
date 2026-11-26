@@ -12,6 +12,7 @@ import {
   findNextLesson,
 } from '@/lib/courseService';
 import { useI18n } from '@/lib/i18n';
+import { errorMessage } from '@/lib/errors';
 import type { Course, CourseProgress, Enrollment, Lesson } from '@/lib/types';
 
 interface ContinueLearningData {
@@ -74,7 +75,7 @@ export function StudentHome({
         setContinueData(null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('home.loadFailed'));
+      setError(errorMessage(err, t('home.loadFailed')));
     } finally {
       setLoading(false);
     }

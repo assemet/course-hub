@@ -20,6 +20,7 @@ import {
 import type { Course, ModuleWithLessons, LessonProgress, Enrollment } from '@/lib/types';
 import { buildCourseDeepLink } from '@/lib/deepLink';
 import { useI18n } from '@/lib/i18n';
+import { errorMessage } from '@/lib/errors';
 
 export function CoursePage({
   courseId,
@@ -77,7 +78,7 @@ export function CoursePage({
         setExpandedModules(new Set([mods[0].id]));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('course.loadFailed'));
+      setError(errorMessage(err, t('course.loadFailed')));
     } finally {
       setLoading(false);
     }

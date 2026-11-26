@@ -11,6 +11,7 @@ import {
 } from '@/lib/courseService';
 import { countPendingImports } from '@/lib/importService';
 import { useI18n } from '@/lib/i18n';
+import { errorMessage } from '@/lib/errors';
 import type { Course } from '@/lib/types';
 
 interface CourseStats {
@@ -62,7 +63,7 @@ export function CreatorDashboard({
       const statsMap: Record<string, CourseStats> = Object.fromEntries(entries);
       setStats(statsMap);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('dash.loadFailed'));
+      setError(errorMessage(err, t('dash.loadFailed')));
     } finally {
       setLoading(false);
     }
