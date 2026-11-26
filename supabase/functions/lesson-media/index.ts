@@ -1,10 +1,13 @@
 // Serves the Telegram file attached to a lesson.
 //
-//   action "view": returns the image bytes so the Mini App can show it inline.
-//                  Images only (the Bot API can download files up to 20 MB).
-//   action "send": the bot sends the file to the caller's own Telegram chat.
-//                  Works for any type and size, including videos, and for
-//                  files that came from private channels.
+//   action "view":  returns the image bytes so the Mini App can show it inline.
+//                   Images only (the Bot API can download files up to 20 MB).
+//   action "thumb": returns the small preview image (video frame, PDF first
+//                   page, ...). Also works for Import Inbox items (`import_id`
+//                   instead of `lesson_id`), which only their creator can read.
+//   action "send":  the bot sends the file to the caller's own Telegram chat.
+//                   Works for any type and size, including videos, and for
+//                   files that came from private channels.
 //
 // Who is asking comes from Telegram initData (verified with the bot token).
 // Whether they may see the lesson is decided by the database's own RLS: the
@@ -24,6 +27,7 @@ interface LessonMedia {
   media_file_id: string | null;
   media_file_name: string | null;
   media_mime_type: string | null;
+  media_thumb_file_id: string | null;
 }
 
 /** Bot API method and its file parameter for each kind of file_id. */
@@ -38,6 +42,32 @@ const SEND_METHOD: Record<FileKind, [method: string, field: string]> = {
 };
 
 const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024; // Bot API getFile limit
+
+type Action = "view" | "thumb" | "send";
+const ACTIONS: Action[] = ["view", "thumb", "send"];
+
+/** Streams a Telegram file (<= 20 MB) back as an image response. */
+async function imageResponse(botToken: string, fileId: string, mimeType: string | null): Promise<Response> {
+  const fileInfo = await botApi(botToken, "getFile", { file_id: fileId });
+  const filePath = fileInfo.result?.file_path as string | undefined;
+  // "file is too big" is the usual reason; the client falls back to "send".
+  if (!fileInfo.ok || !filePath) return json({ error: "too_big" }, 413);
+  if (typeof fileInfo.result?.file_size === "number" && fileInfo.result.file_size > MAX_DOWNLOAD_BYTES) {
+    return json({ error: "too_big" }, 413);
+  }
+
+  const file = await fetch(`https://api.telegram.org/file/bot${botToken}/${filePath}`);
+  if (!file.ok || !file.body) return json({ error: "file_unavailable" }, 502);
+
+  return new Response(file.body, {
+    status: 200,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": mimeType?.startsWith("image/") ? mimeType : "image/jpeg",
+      "Cache-Control": "private, max-age=86400",
+    },
+  });
+}
 
 async function botApi(botToken: string, method: string, params: Record<string, unknown>) {
   const res = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
@@ -67,8 +97,12 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => null);
     const initData = typeof body?.init_data === "string" ? body.init_data : "";
     const lessonId = typeof body?.lesson_id === "string" ? body.lesson_id : "";
-    const action = body?.action === "view" || body?.action === "send" ? body.action : null;
-    if (!lessonId || !action) return json({ error: "lesson_id and action are required" }, 400);
+    const importId = typeof body?.import_id === "string" ? body.import_id : "";
+    const action: Action | null = ACTIONS.includes(body?.action) ? body.action : null;
+    if (!action || (!lessonId && !importId)) {
+      return json({ error: "lesson_id (or import_id) and action are required" }, 400);
+    }
+    if (importId && action !== "thumb") return json({ error: "Only thumbnails are available for imports" }, 400);
 
     const tgUser = await verifyInitData(initData, botToken);
     if (!tgUser) return json({ error: "Invalid Telegram session" }, 401);
@@ -93,13 +127,31 @@ Deno.serve(async (req: Request) => {
       auth: { persistSession: false, autoRefreshToken: false },
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
+
+    // Import Inbox preview: RLS only lets creators read their own imports.
+    if (importId) {
+      const { data: item, error: itemErr } = await asUser
+        .from("imported_messages")
+        .select("thumb_file_id")
+        .eq("id", importId)
+        .maybeSingle<{ thumb_file_id: string | null }>();
+      if (itemErr) throw itemErr;
+      if (!item?.thumb_file_id) return json({ error: "not_found" }, 404);
+      return await imageResponse(botToken, item.thumb_file_id, "image/jpeg");
+    }
+
     const { data: lesson, error: lessonErr } = await asUser
       .from("lessons")
-      .select("title, media_type, media_kind, media_file_id, media_file_name, media_mime_type")
+      .select("title, media_type, media_kind, media_file_id, media_file_name, media_mime_type, media_thumb_file_id")
       .eq("id", lessonId)
       .maybeSingle<LessonMedia>();
     if (lessonErr) throw lessonErr;
     if (!lesson?.media_file_id || !lesson.media_kind) return json({ error: "not_found" }, 404);
+
+    if (action === "thumb") {
+      if (!lesson.media_thumb_file_id) return json({ error: "not_found" }, 404);
+      return await imageResponse(botToken, lesson.media_thumb_file_id, "image/jpeg");
+    }
 
     if (action === "send") {
       const [method, field] = SEND_METHOD[lesson.media_kind];
@@ -117,28 +169,7 @@ Deno.serve(async (req: Request) => {
 
     // action === "view": inline images only.
     if (lesson.media_type !== "image") return json({ error: "not_viewable" }, 400);
-
-    const fileInfo = await botApi(botToken, "getFile", { file_id: lesson.media_file_id });
-    const filePath = fileInfo.result?.file_path as string | undefined;
-    if (!fileInfo.ok || !filePath) {
-      // "file is too big" is the usual reason; the client falls back to "send".
-      return json({ error: "too_big" }, 413);
-    }
-    if (typeof fileInfo.result?.file_size === "number" && fileInfo.result.file_size > MAX_DOWNLOAD_BYTES) {
-      return json({ error: "too_big" }, 413);
-    }
-
-    const file = await fetch(`https://api.telegram.org/file/bot${botToken}/${filePath}`);
-    if (!file.ok || !file.body) return json({ error: "file_unavailable" }, 502);
-
-    return new Response(file.body, {
-      status: 200,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": lesson.media_mime_type?.startsWith("image/") ? lesson.media_mime_type : "image/jpeg",
-        "Cache-Control": "private, max-age=3600",
-      },
-    });
+    return await imageResponse(botToken, lesson.media_file_id, lesson.media_mime_type);
   } catch (err) {
     console.error("lesson-media error:", err);
     return json({ error: "Failed to load media" }, 500);

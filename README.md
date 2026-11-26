@@ -108,6 +108,13 @@ student only gets files from lessons they can see. Deploy it with:
 supabase functions deploy lesson-media
 ```
 
+**Thumbnails and durations.** Telegram sends a small preview with most files
+(a video frame, the first page of PDFs uploaded from Telegram apps, album art);
+the bot keeps it with the video/audio length. Lists (course page, Import
+Inbox) and the lesson page show them through `lesson-media` (`action: "thumb"`).
+The app loads previews only when they scroll into view, at most 4 at a time,
+and keeps them for the session.
+
 A `file_id` belongs to one bot: if you ever switch to a different bot token,
 re-import the posts.
 

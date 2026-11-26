@@ -80,6 +80,8 @@ export async function importMessageToLesson(
           media_file_name: message.file_name,
           media_mime_type: message.file_mime_type,
           media_file_size: message.file_size,
+          media_thumb_file_id: message.thumb_file_id,
+          media_duration: message.duration,
         }
       : {}),
   });

@@ -19,7 +19,18 @@ import {
 } from '@/lib/courseService';
 import type { Course, ModuleWithLessons, LessonProgress, Enrollment } from '@/lib/types';
 import { buildCourseDeepLink } from '@/lib/deepLink';
-import { useI18n } from '@/lib/i18n';
+import { useI18n, type TKey } from '@/lib/i18n';
+import { MediaThumb } from '@/components/MediaThumb';
+import { formatDuration } from '@/lib/mediaService';
+import type { LessonMediaType } from '@/lib/types';
+
+const mediaLabelKeys: Record<LessonMediaType, TKey> = {
+  video: 'media.video',
+  pdf: 'media.pdf',
+  audio: 'media.audio',
+  image: 'media.image',
+  file: 'media.file',
+};
 import { errorMessage } from '@/lib/errors';
 
 export function CoursePage({
@@ -269,12 +280,31 @@ export function CoursePage({
                                 >
                                   {lesson.title}
                                 </p>
-                                {lesson.description && (
-                                  <p className="text-xs text-slate-400 truncate mt-0.5">
+                                {lesson.media_type ? (
+                                  <p className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
+                                    <span>{t(mediaLabelKeys[lesson.media_type])}</span>
+                                    {formatDuration(lesson.media_duration) && (
+                                      <>
+                                        <span aria-hidden="true">·</span>
+                                        <bdi>{formatDuration(lesson.media_duration)}</bdi>
+                                      </>
+                                    )}
+                                  </p>
+                                ) : lesson.description ? (
+                                  <p dir="auto" className="text-xs text-slate-400 truncate mt-0.5 text-start">
                                     {lesson.description}
                                   </p>
-                                )}
+                                ) : null}
                               </div>
+                              {lesson.media_type && (
+                                <MediaThumb
+                                  source={{ lessonId: lesson.id }}
+                                  mediaType={lesson.media_type}
+                                  hasThumb={!!lesson.media_thumb_file_id}
+                                  className="h-11 w-16 rounded-lg"
+                                  iconClassName="h-5 w-5"
+                                />
+                              )}
                               <ChevronDown className="h-4 w-4 text-slate-300 -rotate-90 rtl:rotate-90" />
                             </button>
                           );

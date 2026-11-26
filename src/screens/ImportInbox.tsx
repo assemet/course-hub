@@ -1,8 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import {
-  Inbox, Trash2, ArrowRight, Video, FileText, Link as LinkIcon,
-  Image as ImageIcon, File as FileIcon, Type, RefreshCw, Send, BookOpen, CheckCircle2, Music, Paperclip,
-} from 'lucide-react';
+import { Inbox, Trash2, ArrowRight, RefreshCw, Send, BookOpen, CheckCircle2, Paperclip } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { LoadingScreen } from '@/components/Spinner';
 import { ErrorState, EmptyState } from '@/components/StateViews';
@@ -15,17 +12,8 @@ import { fetchCoursesByCreator, fetchModulesWithLessons } from '@/lib/courseServ
 import { hapticFeedback, openTelegramLink } from '@/lib/telegram';
 import { buildBotChatLink } from '@/lib/deepLink';
 import { formatFileSize, splitFileName } from '@/lib/mediaService';
+import { MediaThumb } from '@/components/MediaThumb';
 import type { ImportedMessage, ImportMediaType, Course, ModuleWithLessons } from '@/lib/types';
-
-const mediaIcons: Record<ImportMediaType, typeof FileText> = {
-  video: Video,
-  pdf: FileText,
-  text: Type,
-  link: LinkIcon,
-  image: ImageIcon,
-  file: FileIcon,
-  audio: Music,
-};
 
 const mediaBadgeColors: Record<ImportMediaType, string> = {
   video: 'bg-red-50 text-red-500',
@@ -260,14 +248,18 @@ export function ImportInbox({ onBack }: { onBack: () => void }) {
               {t('inbox.pendingCount', { n: imports.length })}
             </h2>
             {imports.map((msg) => {
-              const Icon = mediaIcons[msg.media_type] ?? Type;
               const canImport = !!selectedCourse && !!selectedModule && importing === null;
               return (
                 <Card key={msg.id} className="p-4">
                   <div className="flex items-start gap-3">
-                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${mediaBadgeColors[msg.media_type]}`}>
-                      <Icon className="h-5 w-5" />
-                    </div>
+                    <MediaThumb
+                      source={{ importId: msg.id }}
+                      mediaType={msg.media_type}
+                      hasThumb={!!msg.thumb_file_id}
+                      duration={msg.duration}
+                      className="h-16 w-16"
+                      iconClassName="h-6 w-6"
+                    />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${mediaBadgeColors[msg.media_type]}`}>

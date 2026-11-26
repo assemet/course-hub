@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { Video, FileText, Music, File as FileIcon, Send, CheckCircle2, AlertCircle, MessageCircle } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { useI18n, type TKey } from '@/lib/i18n';
-import { loadLessonImage, sendLessonMediaToChat, formatFileSize, splitFileName } from '@/lib/mediaService';
+import { loadLessonImage, sendLessonMediaToChat, formatFileSize, formatDuration, splitFileName } from '@/lib/mediaService';
 import { hapticFeedback, openTelegramLink, requestBotWriteAccess } from '@/lib/telegram';
 import { buildBotChatLink } from '@/lib/deepLink';
+import { MediaThumb } from '@/components/MediaThumb';
 import type { Lesson, LessonMediaType } from '@/lib/types';
 
 const typeIcons: Record<LessonMediaType, typeof FileText> = {
@@ -176,19 +177,45 @@ function LessonFile({ lesson, note }: { lesson: Lesson; note?: string }) {
   const size = formatFileSize(lesson.media_file_size);
   const { base, ext } = splitFileName(lesson.media_file_name);
   const typeLabel = t(typeLabels[type]);
-  // Type, extension (when it adds something) and size, each isolated for bidi.
-  const details = [typeLabel, ext && ext !== typeLabel ? ext : null, size].filter(Boolean) as string[];
+  const duration = type === 'video' || type === 'audio' ? formatDuration(lesson.media_duration) : null;
+  // Type, extension (when it adds something), duration and size, each isolated for bidi.
+  const details = [typeLabel, ext && ext !== typeLabel ? ext : null, duration, size].filter(Boolean) as string[];
+  const hasPreview = !!lesson.media_thumb_file_id && (type === 'video' || type === 'pdf' || type === 'file');
 
   return (
     <Card className="p-4">
+      {hasPreview && (
+        // Tapping the preview does the same as the button: the file goes to the chat.
+        <button
+          onClick={send}
+          disabled={state === 'sending'}
+          aria-label={t('lessonMedia.sendToChat')}
+          className="block w-full mb-4 active:scale-[0.99] transition-transform"
+        >
+          <MediaThumb
+            source={{ lessonId: lesson.id }}
+            mediaType={type}
+            hasThumb
+            duration={type === 'video' ? lesson.media_duration : null}
+            fit={type === 'video' ? 'cover' : 'contain'}
+            className={type === 'video' ? 'w-full aspect-video rounded-xl' : 'w-full h-56 rounded-xl'}
+            iconClassName="h-10 w-10"
+          />
+        </button>
+      )}
       <div className="flex items-center gap-3">
-        <div className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${typeColors[type]}`}>
-          <Icon className="h-6 w-6" />
-        </div>
+        {/* With a preview above, the type icon would only repeat it. */}
+        {!hasPreview && (
+          <div className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${typeColors[type]}`}>
+            <Icon className="h-6 w-6" />
+          </div>
+        )}
         <div className="flex-1 min-w-0">
-          <p dir="auto" className="text-sm font-semibold text-slate-900 truncate text-left rtl:text-right">
-            {base ?? typeLabel}
-          </p>
+          {(base || !hasPreview) && (
+            <p dir="auto" className="text-sm font-semibold text-slate-900 truncate text-left rtl:text-right">
+              {base ?? typeLabel}
+            </p>
+          )}
           <p className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 mt-0.5">
             {details.map((d, i) => (
               <span key={i} className="flex items-center gap-1.5">

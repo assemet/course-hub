@@ -50,6 +50,10 @@ export interface Lesson {
   media_file_name: string | null;
   media_mime_type: string | null;
   media_file_size: number | null;
+  /** Telegram preview image (video frame, PDF first page, ...). */
+  media_thumb_file_id: string | null;
+  /** Seconds, for video and audio. */
+  media_duration: number | null;
 }
 
 /** Exact Telegram object type of a file_id; decides how the bot can resend it. */
@@ -120,6 +124,8 @@ export interface ImportedMessage {
   file_name: string | null;
   file_mime_type: string | null;
   file_size: number | null;
+  thumb_file_id: string | null;
+  duration: number | null;
   status: ImportStatus;
   created_at: string;
 }

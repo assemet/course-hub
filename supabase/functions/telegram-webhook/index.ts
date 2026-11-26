@@ -23,6 +23,10 @@ interface TgFileRef {
   fileName: string | null;
   mimeType: string | null;
   fileSize: number | null;
+  /** Small JPEG preview (video frame, PDF first page, album art, ...). */
+  thumbFileId: string | null;
+  /** Seconds, for video and audio. */
+  duration: number | null;
 }
 
 interface Detected {
@@ -32,11 +36,23 @@ interface Detected {
 }
 
 // The subset of the Telegram objects this function reads.
+interface TgPhotoSize {
+  file_id?: string;
+  width?: number;
+  height?: number;
+}
+
 interface TgFile {
   file_id?: string;
   file_name?: string;
   mime_type?: string;
   file_size?: number;
+  duration?: number;
+  width?: number;
+  height?: number;
+  thumbnail?: TgPhotoSize;
+  /** Pre-Bot API 6.6 name of `thumbnail`. */
+  thumb?: TgPhotoSize;
 }
 
 interface TgMessage {
@@ -72,7 +88,15 @@ function fileRef(kind: FileKind, f: TgFile | undefined, fallbackMime: string | n
     fileName: f.file_name ?? null,
     mimeType: f.mime_type ?? fallbackMime,
     fileSize: typeof f.file_size === "number" ? f.file_size : null,
+    thumbFileId: (f.thumbnail ?? f.thumb)?.file_id ?? null,
+    duration: typeof f.duration === "number" && f.duration >= 0 ? Math.round(f.duration) : null,
   };
+}
+
+/** The smallest photo size that still looks sharp in a list (~320px), else the largest. */
+function previewSize(sizes: TgFile[]): TgFile {
+  const sharp = sizes.find((s) => Math.min(s.width ?? 0, s.height ?? 0) >= 240);
+  return sharp ?? sizes[sizes.length - 1];
 }
 
 /** The attachment of a message and the media type it should be shown as. */
@@ -80,8 +104,11 @@ function detectAttachment(message: TgMessage): { mediaType: MediaType; file: TgF
   const attach = (mediaType: MediaType, file: TgFileRef | null) => (file ? { mediaType, file } : null);
 
   if (message.photo?.length) {
-    // Telegram sends several sizes, smallest first; keep the largest.
-    return attach("image", fileRef("photo", message.photo[message.photo.length - 1], "image/jpeg"));
+    // Telegram sends several sizes, smallest first; keep the largest, and a
+    // mid-size one as the preview.
+    const ref = fileRef("photo", message.photo[message.photo.length - 1], "image/jpeg");
+    if (ref) ref.thumbFileId = previewSize(message.photo).file_id ?? ref.fileId;
+    return attach("image", ref);
   }
   if (message.video) return attach("video", fileRef("video", message.video));
   if (message.video_note) return attach("video", fileRef("video_note", message.video_note, "video/mp4"));
@@ -249,6 +276,8 @@ Deno.serve(async (req: Request) => {
         file_name: file?.fileName ?? null,
         file_mime_type: file?.mimeType ?? null,
         file_size: file?.fileSize ?? null,
+        thumb_file_id: file?.thumbFileId ?? null,
+        duration: file?.duration ?? null,
         status: "pending",
       },
       { onConflict: "creator_id,telegram_message_id", ignoreDuplicates: true },
