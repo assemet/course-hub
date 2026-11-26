@@ -20,6 +20,7 @@ import { QuizScreen } from '@/screens/QuizScreen';
 import { CertificateScreen } from '@/screens/CertificateScreen';
 import { VerifyCertificateScreen } from '@/screens/VerifyCertificateScreen';
 import { FlashcardScreen } from '@/screens/FlashcardScreen';
+import { hideSplash } from '@/lib/splash';
 
 type Screen =
   | { name: 'tab' }
@@ -43,6 +44,11 @@ function AppContent() {
   // Telegram's back button (and Android's back key) returns to the previous
   // screen instead of closing the app; it is hidden on the main tabs.
   useBackButton(screenStack.length > 0 ? () => setScreenStack((s) => s.slice(0, -1)) : null);
+
+  // Fade out the splash screen (index.html) once startup has finished.
+  useEffect(() => {
+    if (!loading) hideSplash();
+  }, [loading]);
 
   // Handle deep link on mount
   useEffect(() => {

@@ -67,6 +67,15 @@ Arabic switches the whole layout to RTL (`<html dir="rtl">`).
 To add or change text, add the key to **both** `en` and `ar`; TypeScript fails
 the build if a key is missing from the Arabic dictionary.
 
+## Splash screen
+
+`index.html` shows the logo (`public/logo.webp`) with a short intro animation
+on the very first paint, before the JavaScript loads. It follows the saved
+theme and language (or Telegram's). The app fades it out once startup has
+finished (`src/lib/splash.ts`), after at least 1.2 s of animation so it isn't
+cut off; a timer removes it after 10 s if the app never starts. Animations are
+off when the device asks for reduced motion.
+
 ## Theme (light / dark)
 
 By default the app follows Telegram's theme (and updates live when the user
