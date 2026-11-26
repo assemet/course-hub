@@ -11,6 +11,8 @@ import { LessonPage } from '@/screens/LessonPage';
 import { Profile } from '@/screens/Profile';
 import { CreatorDashboard } from '@/screens/CreatorDashboard';
 import { CourseEditor } from '@/screens/CourseEditor';
+import { ImportInbox } from '@/screens/ImportInbox';
+import { useI18n } from '@/lib/i18n';
 import { getDeepLinkCourseId } from '@/lib/deepLink';
 
 type Screen =
@@ -18,10 +20,12 @@ type Screen =
   | { name: 'course'; courseId: string }
   | { name: 'lesson'; courseId: string; lessonId: string }
   | { name: 'creator-dashboard' }
+  | { name: 'import-inbox' }
   | { name: 'course-editor'; courseId: string | null; isNew: boolean };
 
 function AppContent() {
   const { user, loading, error, notInTelegram } = useUser();
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<TabKey>('home');
   const [screenStack, setScreenStack] = useState<Screen[]>([]);
 
@@ -34,22 +38,20 @@ function AppContent() {
     }
   }, [user]);
 
-  if (loading) return <LoadingScreen message="Starting Course Tracker..." />;
+  if (loading) return <LoadingScreen message={t('app.starting')} />;
   if (notInTelegram) {
     return (
       <div className="min-h-screen bg-slate-50 max-w-lg mx-auto flex flex-col items-center justify-center px-6 text-center">
         <div className="h-16 w-16 rounded-2xl bg-sky-100 flex items-center justify-center mb-4">
           <MessageCircle className="h-8 w-8 text-sky-500" />
         </div>
-        <h1 className="text-xl font-bold text-slate-800 mb-2">Open in Telegram</h1>
-        <p className="text-sm text-slate-500 max-w-xs">
-          Please open this app inside Telegram to use it. Launch the bot from your Telegram chat to get started.
-        </p>
+        <h1 className="text-xl font-bold text-slate-800 mb-2">{t('app.openInTelegram.title')}</h1>
+        <p className="text-sm text-slate-500 max-w-xs">{t('app.openInTelegram.body')}</p>
       </div>
     );
   }
   if (error) return <ErrorState message={error} />;
-  if (!user) return <ErrorState message="Could not load your profile. Please refresh." />;
+  if (!user) return <ErrorState message={t('app.profileLoadFailed')} />;
 
   const currentScreen = screenStack[screenStack.length - 1];
 
@@ -96,6 +98,12 @@ function AppContent() {
             />
           </div>
         );
+      case 'import-inbox':
+        return (
+          <div className="min-h-screen bg-slate-50 max-w-lg mx-auto">
+            <ImportInbox onBack={popScreen} />
+          </div>
+        );
       default:
         break;
     }
@@ -122,6 +130,7 @@ function AppContent() {
           <CreatorDashboard
             onEditCourse={(courseId) => pushScreen({ name: 'course-editor', courseId, isNew: false })}
             onCreateCourse={() => pushScreen({ name: 'course-editor', courseId: null, isNew: true })}
+            onOpenImports={() => pushScreen({ name: 'import-inbox' })}
           />
         )}
       </div>

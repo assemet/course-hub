@@ -2,6 +2,11 @@ import { getTelegramStartParam } from './telegram';
 
 const BOT_USERNAME = 'course_tracker_bot';
 
+/** Direct chat with the bot, where creators forward posts to import them. */
+export function buildBotChatLink(): string {
+  return `https://t.me/${BOT_USERNAME}`;
+}
+
 export function buildCourseDeepLink(courseId: string): string {
   return `https://t.me/${BOT_USERNAME}/app?startapp=course_${courseId}`;
 }

@@ -1,3 +1,5 @@
+import { useI18n } from '@/lib/i18n';
+
 interface SpinnerProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
@@ -14,11 +16,12 @@ export function Spinner({ size = 'md', className = '' }: SpinnerProps) {
   );
 }
 
-export function LoadingScreen({ message = 'Loading...' }: { message?: string }) {
+export function LoadingScreen({ message }: { message?: string }) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col items-center justify-center py-20 gap-3">
       <Spinner size="lg" />
-      <p className="text-sm text-slate-500">{message}</p>
+      <p className="text-sm text-slate-500">{message ?? t('common.loading')}</p>
     </div>
   );
 }

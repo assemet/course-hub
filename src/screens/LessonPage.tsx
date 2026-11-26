@@ -15,6 +15,7 @@ import {
   getAllLessonsOrdered,
 } from '@/lib/courseService';
 import { openTelegramLink, openExternalLink, hapticFeedback } from '@/lib/telegram';
+import { useI18n, type TKey } from '@/lib/i18n';
 import type { Course, Lesson, Resource, ModuleWithLessons } from '@/lib/types';
 
 const resourceIcons: Record<string, typeof FileIcon> = {
@@ -24,11 +25,11 @@ const resourceIcons: Record<string, typeof FileIcon> = {
   telegram: Send,
 };
 
-const resourceLabels: Record<string, string> = {
-  pdf: 'PDF',
-  file: 'File',
-  link: 'Link',
-  telegram: 'Telegram',
+const resourceLabelKeys: Record<string, TKey> = {
+  pdf: 'resource.pdf',
+  file: 'resource.file',
+  link: 'resource.link',
+  telegram: 'resource.telegram',
 };
 
 export function LessonPage({
@@ -43,6 +44,7 @@ export function LessonPage({
   lessonId: string;
 }) {
   const { user } = useUser();
+  const { t } = useI18n();
   const [course, setCourse] = useState<Course | null>(null);
   const [modules, setModules] = useState<ModuleWithLessons[]>([]);
   const [currentLesson, setCurrentLesson] = useState<Lesson | null>(null);
@@ -62,7 +64,7 @@ export function LessonPage({
 
       const c = await fetchCourseById(courseId);
       if (!c) {
-        setError('Course not found');
+        setError(t('common.courseNotFound'));
         setLoading(false);
         return;
       }
@@ -80,7 +82,7 @@ export function LessonPage({
       const allLessons = getAllLessonsOrdered(mods);
       const lesson = allLessons.find((l) => l.id === lessonId);
       if (!lesson) {
-        setError('Lesson not found');
+        setError(t('lesson.notFound'));
         setLoading(false);
         return;
       }
@@ -91,11 +93,11 @@ export function LessonPage({
 
       await updateLastLesson(user.id, courseId, lessonId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load lesson');
+      setError(err instanceof Error ? err.message : t('lesson.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [user, courseId, lessonId]);
+  }, [user, courseId, lessonId, t]);
 
   useEffect(() => {
     load();
@@ -118,7 +120,7 @@ export function LessonPage({
       setTimeout(() => setShowSuccess(false), 2500);
     } catch (err) {
       // Keep the lesson on screen; a failed save shouldn't throw the learner out of it.
-      setActionError(err instanceof Error ? err.message : 'Failed to mark lesson as complete');
+      setActionError(err instanceof Error ? err.message : t('lesson.markFailed'));
     } finally {
       setMarking(false);
     }
@@ -138,14 +140,14 @@ export function LessonPage({
 
   if (loading) return (
     <>
-      <AppHeader title="Lesson" onBack={onBack} />
-      <LoadingScreen message="Loading lesson..." />
+      <AppHeader title={t('lesson.title')} onBack={onBack} />
+      <LoadingScreen message={t('lesson.loading')} />
     </>
   );
 
   if (error) return (
     <>
-      <AppHeader title="Lesson" onBack={onBack} />
+      <AppHeader title={t('lesson.title')} onBack={onBack} />
       <ErrorState message={error} onRetry={load} />
     </>
   );
@@ -154,14 +156,14 @@ export function LessonPage({
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <AppHeader title={course?.title ?? 'Lesson'} onBack={onBack} />
+      <AppHeader title={course?.title ?? t('lesson.title')} onBack={onBack} />
 
       <div className="px-4 py-5 space-y-5 pb-28">
         {/* Lesson title */}
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{currentLesson.title}</h1>
+          <h1 dir="auto" className="text-2xl font-bold text-slate-900 text-left rtl:text-right">{currentLesson.title}</h1>
           {currentLesson.description && (
-            <p className="text-sm text-slate-500 mt-2">{currentLesson.description}</p>
+            <p dir="auto" className="text-sm text-slate-500 mt-2 text-start">{currentLesson.description}</p>
           )}
         </div>
 
@@ -170,14 +172,14 @@ export function LessonPage({
           <Card className="p-4 bg-blue-50 border-blue-200">
             <button
               onClick={() => openTelegramLink(currentLesson.telegram_url!)}
-              className="flex items-center gap-3 w-full text-left"
+              className="flex items-center gap-3 w-full text-start"
             >
               <div className="h-10 w-10 rounded-xl bg-blue-500 flex items-center justify-center flex-shrink-0">
                 <Send className="h-5 w-5 text-white" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-semibold text-blue-900">View on Telegram</p>
-                <p className="text-xs text-blue-600 mt-0.5">Open the original Telegram content</p>
+                <p className="text-sm font-semibold text-blue-900">{t('lesson.viewOnTelegram')}</p>
+                <p className="text-xs text-blue-600 mt-0.5">{t('lesson.openOriginal')}</p>
               </div>
               <ExternalLink className="h-5 w-5 text-blue-500" />
             </button>
@@ -192,13 +194,13 @@ export function LessonPage({
                 if (line.trim() === '') return <div key={i} className="h-3" />;
                 if (line.startsWith('- ') || line.startsWith('  ')) {
                   return (
-                    <p key={i} className="text-slate-700 text-sm leading-relaxed pl-3">
+                    <p key={i} dir="auto" className="text-slate-700 text-sm leading-relaxed ps-3 text-start">
                       {line}
                     </p>
                   );
                 }
                 return (
-                  <p key={i} className="text-slate-700 text-sm leading-relaxed">
+                  <p key={i} dir="auto" className="text-slate-700 text-sm leading-relaxed text-start">
                     {line}
                   </p>
                 );
@@ -211,7 +213,7 @@ export function LessonPage({
         {resources.length > 0 && (
           <div>
             <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
-              Resources
+              {t('lesson.resources')}
             </h2>
             <div className="space-y-2">
               {resources.map((resource) => {
@@ -223,9 +225,9 @@ export function LessonPage({
                         <Icon className="h-5 w-5 text-slate-600" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate">{resource.title}</p>
+                        <p dir="auto" className="text-sm font-medium text-slate-900 truncate text-left rtl:text-right">{resource.title}</p>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs font-medium text-slate-400 uppercase">{resourceLabels[resource.type]}</span>
+                          <span className="text-xs font-medium text-slate-400 uppercase">{t(resourceLabelKeys[resource.type] ?? 'resource.link')}</span>
                           {resource.description && (
                             <span className="text-xs text-slate-400 truncate">— {resource.description}</span>
                           )}
@@ -247,16 +249,16 @@ export function LessonPage({
             disabled={!prevLesson}
             className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl border border-slate-200 text-slate-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-slate-50 enabled:active:scale-95 transition-all"
           >
-            <ChevronLeft className="h-4 w-4" />
-            Previous
+            <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+            {t('lesson.prev')}
           </button>
           <button
             onClick={() => nextLesson && handleNavigate(nextLesson.id)}
             disabled={!nextLesson}
             className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl border border-slate-200 text-slate-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-slate-50 enabled:active:scale-95 transition-all"
           >
-            Next
-            <ChevronRight className="h-4 w-4" />
+            {t('lesson.next')}
+            <ChevronRight className="h-4 w-4 rtl:rotate-180" />
           </button>
         </div>
       </div>
@@ -272,7 +274,7 @@ export function LessonPage({
           {showSuccess && (
             <div className="mb-2 flex items-center justify-center gap-1.5 text-green-600 text-sm font-medium animate-pulse">
               <CheckCircle2 className="h-4 w-4" />
-              {nextLesson ? 'Lesson completed! Next lesson is ready.' : 'Lesson completed!'}
+              {nextLesson ? t('lesson.completedNext') : t('lesson.completedDone')}
             </div>
           )}
           <button
@@ -287,17 +289,17 @@ export function LessonPage({
             {completed ? (
               <>
                 <Check className="h-5 w-5" strokeWidth={3} />
-                Completed
+                {t('lesson.completed')}
               </>
             ) : marking ? (
               <>
                 <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Saving...
+                {t('lesson.saving')}
               </>
             ) : (
               <>
                 <Check className="h-5 w-5" />
-                Mark as Completed
+                {t('lesson.markComplete')}
               </>
             )}
           </button>

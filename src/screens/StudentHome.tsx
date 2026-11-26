@@ -11,6 +11,7 @@ import {
   fetchLessonProgress,
   findNextLesson,
 } from '@/lib/courseService';
+import { useI18n } from '@/lib/i18n';
 import type { Course, CourseProgress, Enrollment, Lesson } from '@/lib/types';
 
 interface ContinueLearningData {
@@ -29,6 +30,7 @@ export function StudentHome({
   onOpenLesson: (courseId: string, lessonId: string) => void;
 }) {
   const { user } = useUser();
+  const { t } = useI18n();
   const [enrollments, setEnrollments] = useState<
     Array<{ course: Course; progress: CourseProgress; enrollment: Enrollment }>
   >([]);
@@ -72,17 +74,17 @@ export function StudentHome({
         setContinueData(null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load your courses');
+      setError(err instanceof Error ? err.message : t('home.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, t]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  if (loading) return <LoadingScreen message="Loading your courses..." />;
+  if (loading) return <LoadingScreen message={t('home.loading')} />;
   if (error) return <ErrorState message={error} onRetry={load} />;
 
   return (
@@ -93,7 +95,7 @@ export function StudentHome({
           {user?.first_name?.charAt(0).toUpperCase() ?? 'S'}
         </div>
         <div>
-          <p className="text-sm text-slate-500">Welcome back,</p>
+          <p className="text-sm text-slate-500">{t('home.welcome')}</p>
           <p className="text-xl font-bold text-slate-900">{user?.first_name}</p>
         </div>
       </div>
@@ -102,7 +104,7 @@ export function StudentHome({
       {continueData ? (
         <div>
           <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
-            Continue Learning
+            {t('home.continue')}
           </h2>
           <Card
             className="p-5 bg-gradient-to-br from-blue-500 to-blue-600 border-blue-600"
@@ -119,15 +121,15 @@ export function StudentHome({
                 <GraduationCap className="h-7 w-7 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-white font-bold text-lg truncate">
+                <h3 dir="auto" className="text-white font-bold text-lg truncate text-left rtl:text-right">
                   {continueData.course.title}
                 </h3>
                 {continueData.nextLesson && continueData.nextModuleTitle ? (
                   <p className="text-blue-100 text-sm mt-0.5 truncate">
-                    Next: {continueData.nextModuleTitle} — {continueData.nextLesson.title}
+                    {t('home.next', { module: continueData.nextModuleTitle, lesson: continueData.nextLesson.title })}
                   </p>
                 ) : (
-                  <p className="text-blue-100 text-sm mt-0.5">All caught up — review anytime</p>
+                  <p className="text-blue-100 text-sm mt-0.5">{t('home.caughtUp')}</p>
                 )}
                 <div className="mt-3 flex items-center gap-3">
                   <div className="flex-1">
@@ -139,7 +141,7 @@ export function StudentHome({
                 </div>
                 <div className="mt-3 flex items-center gap-1.5 text-white font-medium text-sm">
                   <PlayCircle className="h-5 w-5" />
-                  <span>{continueData.nextLesson ? 'Continue' : 'Review course'}</span>
+                  <span>{continueData.nextLesson ? t('home.continueBtn') : t('home.review')}</span>
                 </div>
               </div>
             </div>
@@ -148,12 +150,12 @@ export function StudentHome({
       ) : (
         <div>
           <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
-            Continue Learning
+            {t('home.continue')}
           </h2>
           <Card className="p-6 text-center">
             <EmptyState
-              title="No courses yet"
-              description="Browse available courses and start learning today."
+              title={t('home.empty.title')}
+              description={t('home.empty.desc')}
               icon={<BookOpen className="h-7 w-7 text-slate-400" />}
             />
           </Card>
@@ -163,13 +165,11 @@ export function StudentHome({
       {/* My Courses */}
       <div>
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
-          My Courses
+          {t('home.myCourses')}
         </h2>
         {enrollments.length === 0 ? (
           <Card className="p-6 text-center">
-            <p className="text-sm text-slate-500">
-              You haven't enrolled in any courses yet.
-            </p>
+            <p className="text-sm text-slate-500">{t('home.notEnrolled')}</p>
           </Card>
         ) : (
           <div className="space-y-3">
@@ -180,13 +180,13 @@ export function StudentHome({
                     <BookOpen className="h-6 w-6 text-slate-500" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-slate-900 truncate">{course.title}</h3>
+                    <h3 dir="auto" className="font-semibold text-slate-900 truncate text-left rtl:text-right">{course.title}</h3>
                     <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">
-                      {course.description ?? 'No description'}
+                      {course.description ?? t('common.noDescription')}
                     </p>
                     <div className="mt-2 flex items-center gap-3">
                       <span className="text-xs text-slate-400">
-                        {progress.completed_lessons}/{progress.total_lessons} lessons
+                        {t('common.lessonsProgress', { done: progress.completed_lessons, total: progress.total_lessons })}
                       </span>
                       <div className="flex-1">
                         <ProgressBar percent={progress.progress_percent} />
@@ -196,7 +196,7 @@ export function StudentHome({
                       </span>
                     </div>
                   </div>
-                  <ArrowRight className="h-5 w-5 text-slate-300 flex-shrink-0 mt-1" />
+                  <ArrowRight className="h-5 w-5 text-slate-300 flex-shrink-0 mt-1 rtl:rotate-180" />
                 </div>
               </Card>
             ))}

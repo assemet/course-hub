@@ -1,5 +1,6 @@
 import { Home, BookOpen, User as UserIcon, LayoutDashboard } from 'lucide-react';
 import type { UserRole } from '@/lib/types';
+import { useI18n } from '@/lib/i18n';
 
 export type TabKey = 'home' | 'courses' | 'profile' | 'dashboard';
 
@@ -16,17 +17,18 @@ interface TabConfig {
 }
 
 export function BottomNav({ activeTab, onTabChange, role }: BottomNavProps) {
+  const { t } = useI18n();
   const tabs: TabConfig[] =
     role === 'creator'
       ? [
-          { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-          { key: 'courses', label: 'Browse', icon: BookOpen },
-          { key: 'profile', label: 'Profile', icon: UserIcon },
+          { key: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
+          { key: 'courses', label: t('nav.browse'), icon: BookOpen },
+          { key: 'profile', label: t('nav.profile'), icon: UserIcon },
         ]
       : [
-          { key: 'home', label: 'Home', icon: Home },
-          { key: 'courses', label: 'Courses', icon: BookOpen },
-          { key: 'profile', label: 'Profile', icon: UserIcon },
+          { key: 'home', label: t('nav.home'), icon: Home },
+          { key: 'courses', label: t('nav.courses'), icon: BookOpen },
+          { key: 'profile', label: t('nav.profile'), icon: UserIcon },
         ];
 
   return (

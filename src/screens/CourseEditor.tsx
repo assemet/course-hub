@@ -16,6 +16,7 @@ import {
   fetchResourcesByLesson,
 } from '@/lib/courseService';
 import { hapticFeedback, sanitizeUrl } from '@/lib/telegram';
+import { useI18n, type TKey } from '@/lib/i18n';
 import type { Course, ModuleWithLessons, Lesson, Resource, ResourceType } from '@/lib/types';
 
 type EditView = 'overview' | 'modules' | 'lesson';
@@ -30,6 +31,7 @@ export function CourseEditor({
   onBack: () => void;
 }) {
   const { user } = useUser();
+  const { t } = useI18n();
   const [course, setCourse] = useState<Course | null>(null);
   const [modules, setModules] = useState<ModuleWithLessons[]>([]);
   const [view, setView] = useState<EditView>('overview');
@@ -65,12 +67,12 @@ export function CourseEditor({
       if (!courseId) return;
       const c = await fetchCourseById(courseId);
       if (!c) {
-        setError('Course not found');
+        setError(t('common.courseNotFound'));
         setLoading(false);
         return;
       }
       if (c.creator_id !== user.id) {
-        setError('You can only edit your own courses');
+        setError(t('editor.notOwner'));
         setLoading(false);
         return;
       }
@@ -86,11 +88,11 @@ export function CourseEditor({
         setExpandedModules(new Set([mods[0].id]));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load course');
+      setError(err instanceof Error ? err.message : t('course.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [user, courseId, isNew]);
+  }, [user, courseId, isNew, t]);
 
   useEffect(() => {
     load();
@@ -110,11 +112,11 @@ export function CourseEditor({
     if (!user || !title.trim()) return;
     const cleanSlug = slug.trim().toLowerCase();
     if (cleanSlug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(cleanSlug)) {
-      setActionError('Slug can only contain lowercase letters, numbers and single hyphens');
+      setActionError(t('editor.slugInvalid'));
       return;
     }
     if (coverUrl.trim() && !sanitizeUrl(coverUrl)) {
-      setActionError('Cover image must be a valid http(s) link');
+      setActionError(t('editor.coverInvalid'));
       return;
     }
     try {
@@ -153,8 +155,8 @@ export function CourseEditor({
       const code = (err as { code?: string } | null)?.code;
       setActionError(
         code === '23505'
-          ? 'That slug is already taken — choose another one'
-          : err instanceof Error ? err.message : 'Failed to save course'
+          ? t('editor.slugTaken')
+          : err instanceof Error ? err.message : t('editor.saveFailed')
       );
     } finally {
       setSaving(false);
@@ -174,7 +176,7 @@ export function CourseEditor({
       setCourse({ ...course, status: newStatus });
       hapticFeedback('success');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to update status');
+      setActionError(err instanceof Error ? err.message : t('editor.statusFailed'));
     }
   };
 
@@ -196,7 +198,7 @@ export function CourseEditor({
       setModuleTitleInput('');
       hapticFeedback('light');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to add module');
+      setActionError(err instanceof Error ? err.message : t('editor.addModuleFailed'));
     }
   };
 
@@ -212,19 +214,19 @@ export function CourseEditor({
       setEditingModuleId(null);
       setModuleTitleInput('');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to rename module');
+      setActionError(err instanceof Error ? err.message : t('editor.renameModuleFailed'));
     }
   };
 
   const handleDeleteModule = async (moduleId: string) => {
-    if (!confirm('Delete this module and all its lessons?')) return;
+    if (!confirm(t('editor.confirmDeleteModule'))) return;
     try {
       const { error: err } = await supabase.from('modules').delete().eq('id', moduleId);
       if (err) throw err;
       setModules(modules.filter((m) => m.id !== moduleId));
       hapticFeedback('warning');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to delete module');
+      setActionError(err instanceof Error ? err.message : t('editor.deleteModuleFailed'));
     }
   };
 
@@ -245,7 +247,7 @@ export function CourseEditor({
       if (failed?.error) throw failed.error;
       setModules(newModules);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to reorder modules');
+      setActionError(err instanceof Error ? err.message : t('editor.reorderModulesFailed'));
     }
   };
 
@@ -260,7 +262,7 @@ export function CourseEditor({
   }) => {
     if (!course || !lessonData.title.trim()) return;
     if (lessonData.telegram_url.trim() && !sanitizeUrl(lessonData.telegram_url)) {
-      setActionError('Lesson link must be a valid http(s) or t.me link');
+      setActionError(t('editor.lessonUrlInvalid'));
       return;
     }
     try {
@@ -316,12 +318,12 @@ export function CourseEditor({
       setEditingLesson(null);
       hapticFeedback('light');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to save lesson');
+      setActionError(err instanceof Error ? err.message : t('editor.saveLessonFailed'));
     }
   };
 
   const handleDeleteLesson = async (moduleId: string, lessonId: string) => {
-    if (!confirm('Delete this lesson?')) return;
+    if (!confirm(t('editor.confirmDeleteLesson'))) return;
     try {
       const { error: err } = await supabase.from('lessons').delete().eq('id', lessonId);
       if (err) throw err;
@@ -330,7 +332,7 @@ export function CourseEditor({
       ));
       hapticFeedback('warning');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to delete lesson');
+      setActionError(err instanceof Error ? err.message : t('editor.deleteLessonFailed'));
     }
   };
 
@@ -355,7 +357,7 @@ export function CourseEditor({
         m.id === moduleId ? { ...m, lessons: newLessons } : m
       ));
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to reorder lessons');
+      setActionError(err instanceof Error ? err.message : t('editor.reorderLessonsFailed'));
     }
   };
 
@@ -363,7 +365,7 @@ export function CourseEditor({
   const handleAddResource = async (lessonId: string, resource: { title: string; type: ResourceType; url: string; description: string }) => {
     if (!resource.title.trim() || !resource.url.trim()) return;
     if (!sanitizeUrl(resource.url)) {
-      setActionError('Resource link must be a valid http(s) or t.me link');
+      setActionError(t('editor.resourceUrlInvalid'));
       return;
     }
     try {
@@ -389,7 +391,7 @@ export function CourseEditor({
       hapticFeedback('light');
       return data;
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to add resource');
+      setActionError(err instanceof Error ? err.message : t('editor.addResourceFailed'));
     }
   };
 
@@ -399,20 +401,20 @@ export function CourseEditor({
       if (err) throw err;
       hapticFeedback('warning');
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to delete resource');
+      setActionError(err instanceof Error ? err.message : t('editor.deleteResourceFailed'));
     }
   };
 
   if (loading) return (
     <>
-      <AppHeader title={isNew ? 'Create Course' : 'Edit Course'} onBack={onBack} />
-      <LoadingScreen message="Loading..." />
+      <AppHeader title={isNew ? t('editor.create') : t('editor.edit')} onBack={onBack} />
+      <LoadingScreen />
     </>
   );
 
   if (error) return (
     <>
-      <AppHeader title={isNew ? 'Create Course' : 'Edit Course'} onBack={onBack} />
+      <AppHeader title={isNew ? t('editor.create') : t('editor.edit')} onBack={onBack} />
       <ErrorState message={error} onRetry={load} />
     </>
   );
@@ -420,7 +422,7 @@ export function CourseEditor({
   return (
     <div className="min-h-screen bg-slate-50">
       <AppHeader
-        title={isNew ? 'Create Course' : course?.title ?? 'Edit Course'}
+        title={isNew ? t('editor.create') : course?.title ?? t('editor.edit')}
         onBack={onBack}
         rightAction={
           course ? (
@@ -433,9 +435,9 @@ export function CourseEditor({
               }`}
             >
               {course.status === 'published' ? (
-                <><GlobeLock className="h-3.5 w-3.5" /> Unpublish</>
+                <><GlobeLock className="h-3.5 w-3.5" /> {t('editor.unpublish')}</>
               ) : (
-                <><Globe className="h-3.5 w-3.5" /> Publish</>
+                <><Globe className="h-3.5 w-3.5" /> {t('editor.publish')}</>
               )}
             </button>
           ) : null
@@ -445,8 +447,8 @@ export function CourseEditor({
       {/* View tabs */}
       {course && (
         <div className="flex border-b border-slate-200 bg-white px-4 gap-1">
-          <TabButton active={view === 'overview'} onClick={() => setView('overview')} label="Overview" />
-          <TabButton active={view === 'modules'} onClick={() => setView('modules')} label="Modules" />
+          <TabButton active={view === 'overview'} onClick={() => setView('overview')} label={t('editor.tab.overview')} />
+          <TabButton active={view === 'modules'} onClick={() => setView('modules')} label={t('editor.tab.modules')} />
         </div>
       )}
 
@@ -457,7 +459,7 @@ export function CourseEditor({
             className="flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
           >
             <span>{actionError}</span>
-            <button onClick={() => setActionError(null)} aria-label="Dismiss" className="flex-shrink-0">
+            <button onClick={() => setActionError(null)} aria-label={t('common.dismiss')} className="flex-shrink-0">
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -466,42 +468,46 @@ export function CourseEditor({
           <div className="space-y-4">
             <Card className="p-5 space-y-4">
               <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1.5">Course Title</label>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">{t('editor.courseTitle')}</label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Python for Beginners"
+                  placeholder={t('editor.courseTitlePh')}
+                  dir="auto"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1.5">Description</label>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">{t('editor.description')}</label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Short course description"
+                  placeholder={t('editor.descriptionPh')}
+                  dir="auto"
                   rows={3}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1.5">Cover Image URL (optional)</label>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">{t('editor.cover')}</label>
                 <input
                   type="text"
                   value={coverUrl}
                   onChange={(e) => setCoverUrl(e.target.value)}
                   placeholder="https://..."
+                  dir="ltr"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1.5">Course Slug (optional)</label>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">{t('editor.slug')}</label>
                 <input
                   type="text"
                   value={slug}
                   onChange={(e) => setSlug(e.target.value)}
                   placeholder="python-for-beginners"
+                  dir="ltr"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -511,7 +517,7 @@ export function CourseEditor({
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-500 text-white font-semibold text-sm hover:bg-blue-600 active:scale-[0.98] disabled:opacity-50 transition-all"
               >
                 <Save className="h-4 w-4" />
-                {course ? 'Save Changes' : 'Create Course'}
+                {course ? t('editor.saveChanges') : t('editor.create')}
               </button>
             </Card>
 
@@ -529,12 +535,12 @@ export function CourseEditor({
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-slate-900">
-                      Status: {course.status === 'published' ? 'Published' : 'Draft'}
+                      {t('editor.statusLabel', { status: course.status === 'published' ? t('status.published') : t('status.draft') })}
                     </p>
                     <p className="text-xs text-slate-500 mt-0.5">
                       {course.status === 'published'
-                        ? 'Students can see and enroll in this course'
-                        : 'Only you can see this course'}
+                        ? t('editor.publishedHint')
+                        : t('editor.draftHint')}
                     </p>
                   </div>
                 </div>
@@ -552,7 +558,8 @@ export function CourseEditor({
                   type="text"
                   value={editingModuleId === null ? moduleTitleInput : ''}
                   onChange={(e) => setModuleTitleInput(e.target.value)}
-                  placeholder="New module title"
+                  placeholder={t('editor.newModulePh')}
+                  dir="auto"
                   className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   onKeyDown={(e) => e.key === 'Enter' && handleAddModule()}
                 />
@@ -562,7 +569,7 @@ export function CourseEditor({
                   className="flex items-center gap-1 px-4 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-95 disabled:opacity-50 transition-all"
                 >
                   <Plus className="h-4 w-4" />
-                  Add
+                  {t('common.add')}
                 </button>
               </div>
             </Card>
@@ -570,8 +577,8 @@ export function CourseEditor({
             {/* Modules list */}
             {modules.length === 0 ? (
               <EmptyState
-                title="No modules yet"
-                description="Add your first module above to start building the course structure."
+                title={t('editor.noModules.title')}
+                description={t('editor.noModules.desc')}
                 icon={<BookOpen className="h-7 w-7 text-slate-400" />}
               />
             ) : (
@@ -585,6 +592,7 @@ export function CourseEditor({
                           <button
                             onClick={() => handleReorderModule(module.id, 'up')}
                             disabled={mIdx === 0}
+                            aria-label={t('editor.moveUp')}
                             className="text-slate-300 enabled:hover:text-slate-600 disabled:opacity-30 transition-colors"
                           >
                             <ChevronUp className="h-4 w-4" />
@@ -592,6 +600,7 @@ export function CourseEditor({
                           <button
                             onClick={() => handleReorderModule(module.id, 'down')}
                             disabled={mIdx === modules.length - 1}
+                            aria-label={t('editor.moveDown')}
                             className="text-slate-300 enabled:hover:text-slate-600 disabled:opacity-30 transition-colors"
                           >
                             <ChevronDown className="h-4 w-4" />
@@ -599,7 +608,7 @@ export function CourseEditor({
                         </div>
                         <button
                           onClick={() => toggleModule(module.id)}
-                          className="flex-1 flex items-center gap-2 text-left min-w-0"
+                          className="flex-1 flex items-center gap-2 text-start min-w-0"
                         >
                           <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
                             <span className="text-xs font-bold text-blue-500">{mIdx + 1}</span>
@@ -615,24 +624,27 @@ export function CourseEditor({
                               }}
                               onBlur={() => handleRenameModule(module.id)}
                               autoFocus
+                              dir="auto"
                               className="flex-1 px-2 py-1 rounded-lg border border-blue-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                           ) : (
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-slate-900 truncate">{module.title}</p>
-                              <p className="text-xs text-slate-400">{module.lessons.length} lessons</p>
+                              <p dir="auto" className="text-sm font-semibold text-slate-900 truncate text-left rtl:text-right">{module.title}</p>
+                              <p className="text-xs text-slate-400 text-start">{t('common.lessonsCount', { n: module.lessons.length })}</p>
                             </div>
                           )}
                           <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
                         </button>
                         <button
                           onClick={() => { setEditingModuleId(module.id); setModuleTitleInput(module.title); }}
+                          aria-label={t('editor.rename')}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
                         >
                           <Edit2 className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteModule(module.id)}
+                          aria-label={t('common.delete')}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -647,6 +659,7 @@ export function CourseEditor({
                                 <button
                                   onClick={() => handleReorderLesson(module.id, lesson.id, 'up')}
                                   disabled={lIdx === 0}
+                                  aria-label={t('editor.moveUp')}
                                   className="text-slate-300 enabled:hover:text-slate-600 disabled:opacity-30 transition-colors"
                                 >
                                   <ChevronUp className="h-3 w-3" />
@@ -654,6 +667,7 @@ export function CourseEditor({
                                 <button
                                   onClick={() => handleReorderLesson(module.id, lesson.id, 'down')}
                                   disabled={lIdx === module.lessons.length - 1}
+                                  aria-label={t('editor.moveDown')}
                                   className="text-slate-300 enabled:hover:text-slate-600 disabled:opacity-30 transition-colors"
                                 >
                                   <ChevronDown className="h-3 w-3" />
@@ -661,19 +675,21 @@ export function CourseEditor({
                               </div>
                               <button
                                 onClick={() => setEditingLesson({ moduleId: module.id, lesson })}
-                                className="flex-1 flex items-center gap-2 text-left min-w-0"
+                                className="flex-1 flex items-center gap-2 text-start min-w-0"
                               >
                                 <FileText className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                                <span className="text-sm text-slate-700 truncate">{lesson.title}</span>
+                                <span dir="auto" className="text-sm text-slate-700 truncate text-left rtl:text-right">{lesson.title}</span>
                               </button>
                               <button
                                 onClick={() => setEditingLesson({ moduleId: module.id, lesson })}
+                                aria-label={t('editor.editLesson')}
                                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
                               >
                                 <Edit2 className="h-3.5 w-3.5" />
                               </button>
                               <button
                                 onClick={() => handleDeleteLesson(module.id, lesson.id)}
+                                aria-label={t('common.delete')}
                                 className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -686,7 +702,7 @@ export function CourseEditor({
                             className="w-full flex items-center gap-2 py-2 px-2 rounded-lg text-blue-500 text-sm font-medium hover:bg-blue-50 transition-colors"
                           >
                             <Plus className="h-4 w-4" />
-                            Add Lesson
+                            {t('editor.addLesson')}
                           </button>
                         </div>
                       )}
@@ -754,6 +770,7 @@ function LessonEditorModal({
   const [resUrl, setResUrl] = useState('');
   const [resDesc, setResDesc] = useState('');
   const [saving, setSaving] = useState(false);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (lesson) {
@@ -802,10 +819,11 @@ function LessonEditorModal({
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between z-10">
           <h2 className="text-lg font-bold text-slate-900">
-            {lesson ? 'Edit Lesson' : 'New Lesson'}
+            {lesson ? t('editor.lesson.edit') : t('editor.lesson.new')}
           </h2>
           <button
             onClick={onClose}
+            aria-label={t('common.close')}
             className="p-2 rounded-xl hover:bg-slate-100 active:scale-90 transition-all"
           >
             <X className="h-5 w-5 text-slate-500" />
@@ -814,42 +832,46 @@ function LessonEditorModal({
 
         <div className="px-4 py-4 space-y-4">
           <div>
-            <label className="text-sm font-medium text-slate-700 block mb-1.5">Lesson Title</label>
+            <label className="text-sm font-medium text-slate-700 block mb-1.5">{t('editor.lesson.title')}</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Introduction to Variables"
+              placeholder={t('editor.lesson.titlePh')}
+              dir="auto"
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-700 block mb-1.5">Description (optional)</label>
+            <label className="text-sm font-medium text-slate-700 block mb-1.5">{t('editor.lesson.description')}</label>
             <input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Short description"
+              placeholder={t('editor.lesson.descriptionPh')}
+              dir="auto"
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-700 block mb-1.5">Content</label>
+            <label className="text-sm font-medium text-slate-700 block mb-1.5">{t('editor.lesson.content')}</label>
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="Write the lesson content here..."
+              placeholder={t('editor.lesson.contentPh')}
+              dir="auto"
               rows={6}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-700 block mb-1.5">Telegram Content URL (optional)</label>
+            <label className="text-sm font-medium text-slate-700 block mb-1.5">{t('editor.lesson.telegramUrl')}</label>
             <input
               type="text"
               value={telegramUrl}
               onChange={(e) => setTelegramUrl(e.target.value)}
               placeholder="https://t.me/..."
+              dir="ltr"
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
@@ -858,13 +880,13 @@ function LessonEditorModal({
           {lesson && (
             <div className="border-t border-slate-100 pt-4">
               <div className="flex items-center justify-between mb-3">
-                <label className="text-sm font-medium text-slate-700">Resources</label>
+                <label className="text-sm font-medium text-slate-700">{t('lesson.resources')}</label>
                 <button
                   onClick={() => setShowResourceForm(!showResourceForm)}
                   className="flex items-center gap-1 text-blue-500 text-sm font-medium"
                 >
                   <Plus className="h-4 w-4" />
-                  Add
+                  {t('common.add')}
                 </button>
               </div>
 
@@ -874,7 +896,8 @@ function LessonEditorModal({
                     type="text"
                     value={resTitle}
                     onChange={(e) => setResTitle(e.target.value)}
-                    placeholder="Resource title"
+                    placeholder={t('editor.res.titlePh')}
+                    dir="auto"
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <select
@@ -882,23 +905,25 @@ function LessonEditorModal({
                     onChange={(e) => setResType(e.target.value as ResourceType)}
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="link">External Link</option>
-                    <option value="pdf">PDF</option>
-                    <option value="file">File</option>
-                    <option value="telegram">Telegram Link</option>
+                    <option value="link">{t('editor.res.type.link')}</option>
+                    <option value="pdf">{t('editor.res.type.pdf')}</option>
+                    <option value="file">{t('editor.res.type.file')}</option>
+                    <option value="telegram">{t('editor.res.type.telegram')}</option>
                   </select>
                   <input
                     type="text"
                     value={resUrl}
                     onChange={(e) => setResUrl(e.target.value)}
-                    placeholder="URL"
+                    placeholder={t('editor.res.urlPh')}
+                    dir="ltr"
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <input
                     type="text"
                     value={resDesc}
                     onChange={(e) => setResDesc(e.target.value)}
-                    placeholder="Description (optional)"
+                    placeholder={t('editor.lesson.description')}
+                    dir="auto"
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <div className="flex gap-2">
@@ -907,13 +932,13 @@ function LessonEditorModal({
                       disabled={!resTitle.trim() || !resUrl.trim()}
                       className="flex-1 py-2 rounded-lg bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50 transition-all"
                     >
-                      Save Resource
+                      {t('editor.res.save')}
                     </button>
                     <button
                       onClick={() => setShowResourceForm(false)}
                       className="px-4 py-2 rounded-lg bg-slate-100 text-slate-600 text-sm font-medium"
                     >
-                      Cancel
+                      {t('common.cancel')}
                     </button>
                   </div>
                 </div>
@@ -927,11 +952,12 @@ function LessonEditorModal({
                         <ResourceIcon type={res.type} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{res.title}</p>
-                        <p className="text-xs text-slate-400 uppercase">{res.type}</p>
+                        <p dir="auto" className="text-sm font-medium text-slate-800 truncate text-left rtl:text-right">{res.title}</p>
+                        <p className="text-xs text-slate-400">{t(RESOURCE_LABEL_KEYS[res.type])}</p>
                       </div>
                       <button
                         onClick={() => handleDeleteRes(res.id)}
+                        aria-label={t('common.delete')}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -940,7 +966,7 @@ function LessonEditorModal({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-400">No resources yet</p>
+                <p className="text-xs text-slate-400">{t('editor.res.none')}</p>
               )}
             </div>
           )}
@@ -954,13 +980,20 @@ function LessonEditorModal({
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-500 text-white font-semibold text-sm hover:bg-blue-600 active:scale-[0.98] disabled:opacity-50 transition-all"
           >
             <Save className="h-4 w-4" />
-            {saving ? 'Saving...' : 'Save Lesson'}
+            {saving ? t('lesson.saving') : t('editor.lesson.save')}
           </button>
         </div>
       </div>
     </div>
   );
 }
+
+const RESOURCE_LABEL_KEYS: Record<ResourceType, TKey> = {
+  pdf: 'resource.pdf',
+  file: 'resource.file',
+  link: 'resource.link',
+  telegram: 'resource.telegram',
+};
 
 function ResourceIcon({ type }: { type: ResourceType }) {
   switch (type) {

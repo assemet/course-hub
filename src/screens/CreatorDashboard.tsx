@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, BookOpen, Users, Edit, Globe, GlobeLock, ArrowRight, FileText } from 'lucide-react';
+import { Plus, BookOpen, Users, Edit, Globe, GlobeLock, ArrowRight, FileText, Inbox } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { LoadingScreen } from '@/components/Spinner';
 import { ErrorState, EmptyState } from '@/components/StateViews';
@@ -9,6 +9,8 @@ import {
   fetchModulesWithLessons,
   countEnrollmentsForCourse,
 } from '@/lib/courseService';
+import { countPendingImports } from '@/lib/importService';
+import { useI18n } from '@/lib/i18n';
 import type { Course } from '@/lib/types';
 
 interface CourseStats {
@@ -20,11 +22,15 @@ interface CourseStats {
 export function CreatorDashboard({
   onEditCourse,
   onCreateCourse,
+  onOpenImports,
 }: {
   onEditCourse: (courseId: string) => void;
   onCreateCourse: () => void;
+  onOpenImports: () => void;
 }) {
   const { user } = useUser();
+  const { t } = useI18n();
+  const [pendingImports, setPendingImports] = useState(0);
   const [courses, setCourses] = useState<Course[]>([]);
   const [stats, setStats] = useState<Record<string, CourseStats>>({});
   const [loading, setLoading] = useState(true);
@@ -35,8 +41,13 @@ export function CreatorDashboard({
     try {
       setLoading(true);
       setError(null);
-      const myCourses = await fetchCoursesByCreator(user.id);
+      const [myCourses, pending] = await Promise.all([
+        fetchCoursesByCreator(user.id),
+        // The badge is a convenience; never fail the dashboard because of it.
+        countPendingImports(user.id).catch(() => 0),
+      ]);
       setCourses(myCourses);
+      setPendingImports(pending);
 
       const entries = await Promise.all(
         myCourses.map(async (course) => {
@@ -51,39 +62,57 @@ export function CreatorDashboard({
       const statsMap: Record<string, CourseStats> = Object.fromEntries(entries);
       setStats(statsMap);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
+      setError(err instanceof Error ? err.message : t('dash.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, t]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  if (loading) return <LoadingScreen message="Loading dashboard..." />;
+  if (loading) return <LoadingScreen message={t('dash.loading')} />;
   if (error) return <ErrorState message={error} onRetry={load} />;
 
   return (
     <div className="px-4 py-5 space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage your courses</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t('dash.title')}</h1>
+          <p className="text-sm text-slate-500 mt-1">{t('dash.subtitle')}</p>
         </div>
         <button
           onClick={onCreateCourse}
           className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-95 transition-all shadow-sm"
         >
           <Plus className="h-5 w-5" />
-          Create
+          {t('dash.create')}
         </button>
       </div>
 
+      <Card className="p-4" onClick={onOpenImports}>
+        <div className="flex items-center gap-3">
+          <div className="relative h-11 w-11 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+            <Inbox className="h-5 w-5 text-blue-500" />
+            {pendingImports > 0 && (
+              <span className="absolute -top-1.5 -end-1.5 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">
+                {pendingImports > 99 ? '99+' : pendingImports}
+              </span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-slate-900">{t('dash.inbox.title')}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{t('dash.inbox.pending', { n: pendingImports })}</p>
+          </div>
+          <ArrowRight className="h-4 w-4 text-slate-300 flex-shrink-0 rtl:rotate-180" />
+        </div>
+      </Card>
+
       {courses.length === 0 ? (
         <EmptyState
-          title="No courses yet"
-          description="Create your first course to get started."
+          title={t('dash.empty.title')}
+          description={t('dash.empty.desc')}
           icon={<BookOpen className="h-7 w-7 text-slate-400" />}
           action={
             <button
@@ -91,7 +120,7 @@ export function CreatorDashboard({
               className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-95 transition-all"
             >
               <Plus className="h-5 w-5" />
-              Create Course
+              {t('dash.createCourse')}
             </button>
           }
         />
@@ -107,22 +136,22 @@ export function CreatorDashboard({
                     <BookOpen className="h-6 w-6 text-slate-500" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-slate-900 truncate">{course.title}</h3>
+                    <h3 dir="auto" className="font-semibold text-slate-900 truncate text-left rtl:text-right">{course.title}</h3>
                     <p className="text-sm text-slate-500 mt-0.5 line-clamp-1">
-                      {course.description ?? 'No description'}
+                      {course.description ?? t('common.noDescription')}
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-400">
                       <span className="flex items-center gap-1">
                         <FileText className="h-3.5 w-3.5" />
-                        {s?.moduleCount ?? 0} modules
+                        {t('common.modulesCount', { n: s?.moduleCount ?? 0 })}
                       </span>
                       <span className="flex items-center gap-1">
                         <FileText className="h-3.5 w-3.5" />
-                        {s?.lessonCount ?? 0} lessons
+                        {t('common.lessonsCount', { n: s?.lessonCount ?? 0 })}
                       </span>
                       <span className="flex items-center gap-1">
                         <Users className="h-3.5 w-3.5" />
-                        {s?.studentCount ?? 0} students
+                        {t('common.studentsCount', { n: s?.studentCount ?? 0 })}
                       </span>
                     </div>
                     <div className="mt-2 flex items-center gap-2">
@@ -134,9 +163,9 @@ export function CreatorDashboard({
                         }`}
                       >
                         {isPublished ? (
-                          <><Globe className="h-3 w-3" /> Published</>
+                          <><Globe className="h-3 w-3" /> {t('status.published')}</>
                         ) : (
-                          <><GlobeLock className="h-3 w-3" /> Draft</>
+                          <><GlobeLock className="h-3 w-3" /> {t('status.draft')}</>
                         )}
                       </span>
                     </div>
@@ -145,7 +174,7 @@ export function CreatorDashboard({
                     <div className="px-2.5 py-1.5 rounded-lg text-slate-500 text-xs font-medium">
                       <Edit className="h-4 w-4" />
                     </div>
-                    <ArrowRight className="h-4 w-4 text-slate-300" />
+                    <ArrowRight className="h-4 w-4 text-slate-300 rtl:rotate-180" />
                   </div>
                 </div>
               </Card>

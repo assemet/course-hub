@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import { AlertCircle, Inbox } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col items-center justify-center py-16 px-6 gap-3 text-center">
       <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center">
@@ -13,7 +15,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
           onClick={onRetry}
           className="mt-1 px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200 active:scale-95 transition-all"
         >
-          Try again
+          {t('common.tryAgain')}
         </button>
       )}
     </div>

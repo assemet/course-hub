@@ -19,6 +19,7 @@ import {
 } from '@/lib/courseService';
 import type { Course, ModuleWithLessons, LessonProgress, Enrollment } from '@/lib/types';
 import { buildCourseDeepLink } from '@/lib/deepLink';
+import { useI18n } from '@/lib/i18n';
 
 export function CoursePage({
   courseId,
@@ -30,6 +31,7 @@ export function CoursePage({
   onOpenLesson: (courseId: string, lessonId: string) => void;
 }) {
   const { user } = useUser();
+  const { t } = useI18n();
   const [course, setCourse] = useState<Course | null>(null);
   const [modules, setModules] = useState<ModuleWithLessons[]>([]);
   const [progressList, setProgressList] = useState<LessonProgress[]>([]);
@@ -48,7 +50,7 @@ export function CoursePage({
 
       const c = await fetchCourseById(courseId);
       if (!c) {
-        setError('Course not found');
+        setError(t('common.courseNotFound'));
         setLoading(false);
         return;
       }
@@ -75,11 +77,11 @@ export function CoursePage({
         setExpandedModules(new Set([mods[0].id]));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load course');
+      setError(err instanceof Error ? err.message : t('course.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [user, courseId]);
+  }, [user, courseId, t]);
 
   useEffect(() => {
     load();
@@ -118,20 +120,20 @@ export function CoursePage({
       })
       .catch(() => {
         // Clipboard can be unavailable inside some Telegram webviews.
-        window.prompt('Copy this link:', link);
+        window.prompt(t('course.copyPrompt'), link);
       });
   };
 
   if (loading) return (
     <>
-      <AppHeader title="Course" onBack={onBack} />
-      <LoadingScreen message="Loading course..." />
+      <AppHeader title={t('course.title')} onBack={onBack} />
+      <LoadingScreen message={t('course.loading')} />
     </>
   );
 
   if (error) return (
     <>
-      <AppHeader title="Course" onBack={onBack} />
+      <AppHeader title={t('course.title')} onBack={onBack} />
       <ErrorState message={error} onRetry={load} />
     </>
   );
@@ -153,7 +155,7 @@ export function CoursePage({
           <button
             onClick={handleCopyLink}
             className="flex items-center justify-center h-9 w-9 rounded-xl hover:bg-slate-100 active:scale-90 transition-all"
-            aria-label="Share course"
+            aria-label={t('course.share')}
           >
             {linkCopied ? (
               <CheckIcon className="h-5 w-5 text-green-500" />
@@ -172,27 +174,27 @@ export function CoursePage({
               <img src={course.cover_url} alt={course.title} className="w-full h-full object-cover" />
             </div>
           )}
-          <h1 className="text-xl font-bold text-slate-900">{course.title}</h1>
-          <p className="text-sm text-slate-600 mt-2">{course.description}</p>
+          <h1 dir="auto" className="text-xl font-bold text-slate-900 text-left rtl:text-right">{course.title}</h1>
+          <p dir="auto" className="text-sm text-slate-600 mt-2 text-start">{course.description}</p>
           <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
             <div className="h-7 w-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
               {creatorName.charAt(0).toUpperCase()}
             </div>
-            <span>by {creatorName}</span>
+            <span>{t('course.by', { name: creatorName })}</span>
           </div>
           <div className="mt-4 flex items-center gap-4 text-sm">
             <div className="flex items-center gap-1.5 text-slate-500">
               <BookOpen className="h-4 w-4" />
-              <span>{totalModules} modules</span>
+              <span>{t('common.modulesCount', { n: totalModules })}</span>
             </div>
             <div className="flex items-center gap-1.5 text-slate-500">
               <FileText className="h-4 w-4" />
-              <span>{progress.total_lessons} lessons</span>
+              <span>{t('common.lessonsCount', { n: progress.total_lessons })}</span>
             </div>
           </div>
           <div className="mt-4">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-sm font-medium text-slate-700">Overall Progress</span>
+              <span className="text-sm font-medium text-slate-700">{t('course.overall')}</span>
               <span className="text-sm font-bold text-blue-500">{progress.progress_percent}%</span>
             </div>
             <ProgressBar percent={progress.progress_percent} />
@@ -210,15 +212,15 @@ export function CoursePage({
               <Card key={module.id} className="overflow-hidden">
                 <button
                   onClick={() => toggleModule(module.id)}
-                  className="w-full flex items-center gap-3 p-4 text-left"
+                  className="w-full flex items-center gap-3 p-4 text-start"
                 >
                   <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
                     <span className="text-sm font-bold text-blue-500">{index + 1}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-slate-900 truncate">{module.title}</h3>
+                    <h3 dir="auto" className="font-semibold text-slate-900 truncate text-left rtl:text-right">{module.title}</h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {moduleCompleted}/{moduleTotal} lessons completed
+                      {t('course.moduleProgress', { done: moduleCompleted, total: moduleTotal })}
                     </p>
                   </div>
                   <ChevronDown
@@ -231,7 +233,7 @@ export function CoursePage({
                 {expanded && (
                   <div className="border-t border-slate-100">
                     {module.lessons.length === 0 ? (
-                      <p className="px-4 py-3 text-sm text-slate-400">No lessons yet</p>
+                      <p className="px-4 py-3 text-sm text-slate-400">{t('course.noLessons')}</p>
                     ) : (
                       <div className="divide-y divide-slate-100">
                         {module.lessons.map((lesson, lIdx) => {
@@ -240,7 +242,7 @@ export function CoursePage({
                             <button
                               key={lesson.id}
                               onClick={() => handleLessonClick(lesson.id)}
-                              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 active:bg-slate-100 transition-colors"
+                              className="w-full flex items-center gap-3 px-4 py-3 text-start hover:bg-slate-50 active:bg-slate-100 transition-colors"
                             >
                               <div className="flex-shrink-0">
                                 {state === 'completed' ? (
@@ -259,7 +261,8 @@ export function CoursePage({
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p
-                                  className={`text-sm font-medium truncate ${
+                                  dir="auto"
+                                  className={`text-sm font-medium truncate text-left rtl:text-right ${
                                     state === 'completed' ? 'text-slate-400 line-through' : 'text-slate-800'
                                   }`}
                                 >
@@ -271,7 +274,7 @@ export function CoursePage({
                                   </p>
                                 )}
                               </div>
-                              <ChevronDown className="h-4 w-4 text-slate-300 -rotate-90" />
+                              <ChevronDown className="h-4 w-4 text-slate-300 -rotate-90 rtl:rotate-90" />
                             </button>
                           );
                         })}
@@ -288,16 +291,16 @@ export function CoursePage({
         <Card className="p-4 bg-slate-50">
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <LinkIcon className="h-4 w-4 flex-shrink-0" />
-            <span className="truncate">Share link: {buildCourseDeepLink(course.id)}</span>
+            <span className="truncate">{t('course.shareLink', { link: buildCourseDeepLink(course.id) })}</span>
           </div>
           <button
             onClick={handleCopyLink}
             className="mt-2 flex items-center gap-1.5 text-sm font-medium text-blue-500"
           >
             {linkCopied ? (
-              <><CheckIcon className="h-4 w-4" /> Copied!</>
+              <><CheckIcon className="h-4 w-4" /> {t('course.copied')}</>
             ) : (
-              <><Copy className="h-4 w-4" /> Copy link</>
+              <><Copy className="h-4 w-4" /> {t('course.copyLink')}</>
             )}
           </button>
         </Card>

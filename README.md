@@ -57,6 +57,23 @@ curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
 > If the bot token was ever deployed in a build that included `VITE_TELEGRAM_BOT_TOKEN`,
 > treat it as leaked: revoke it in @BotFather (`/revoke`) and set the new one as a secret.
 
+## Language (Arabic / English)
+
+The UI is translated in `src/lib/i18n.tsx` (one dictionary per language).
+The language is picked in this order: the user's choice in the Profile tab
+(saved in localStorage), then the Telegram client language, then Arabic.
+Arabic switches the whole layout to RTL (`<html dir="rtl">`).
+
+To add or change text, add the key to **both** `en` and `ar`; TypeScript fails
+the build if a key is missing from the Arabic dictionary.
+
+## Importing from Telegram
+
+Creators forward channel posts to the bot; they land in the **Import Inbox**
+(Dashboard → Import Inbox) and become lessons with one tap. Only users in
+creator mode can import; the bot replies in the chat to confirm, or to explain
+why a message was not imported.
+
 ## Notes
 
 - `course_tracker_full_schema.sql` is an old all-in-one script with demo data and

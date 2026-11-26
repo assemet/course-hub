@@ -13,10 +13,12 @@ import {
   calculateProgress,
   createEnrollment,
 } from '@/lib/courseService';
+import { useI18n } from '@/lib/i18n';
 import type { Course, CourseProgress } from '@/lib/types';
 
 export function CourseList({ onOpenCourse }: { onOpenCourse: (courseId: string) => void }) {
   const { user } = useUser();
+  const { t } = useI18n();
   const [courses, setCourses] = useState<Course[]>([]);
   const [progressMap, setProgressMap] = useState<Record<string, CourseProgress>>({});
   const [enrolledSet, setEnrolledSet] = useState<Set<string>>(new Set());
@@ -44,11 +46,11 @@ export function CourseList({ onOpenCourse }: { onOpenCourse: (courseId: string) 
       }
       setProgressMap(progressEntries);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load courses');
+      setError(err instanceof Error ? err.message : t('courses.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, t]);
 
   useEffect(() => {
     load();
@@ -66,20 +68,20 @@ export function CourseList({ onOpenCourse }: { onOpenCourse: (courseId: string) 
     onOpenCourse(courseId);
   };
 
-  if (loading) return <LoadingScreen message="Loading courses..." />;
+  if (loading) return <LoadingScreen message={t('courses.loading')} />;
   if (error) return <ErrorState message={error} onRetry={load} />;
 
   return (
     <div className="px-4 py-5 space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Courses</h1>
-        <p className="text-sm text-slate-500 mt-1">Browse and enroll in available courses</p>
+        <h1 className="text-2xl font-bold text-slate-900">{t('courses.title')}</h1>
+        <p className="text-sm text-slate-500 mt-1">{t('courses.subtitle')}</p>
       </div>
 
       {courses.length === 0 ? (
         <EmptyState
-          title="No courses available"
-          description="Check back later for new courses."
+          title={t('courses.empty.title')}
+          description={t('courses.empty.desc')}
           icon={<BookOpen className="h-7 w-7 text-slate-400" />}
         />
       ) : (
@@ -106,14 +108,14 @@ export function CourseList({ onOpenCourse }: { onOpenCourse: (courseId: string) 
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-slate-900">{course.title}</h3>
+                      <h3 dir="auto" className="font-semibold text-slate-900 text-left rtl:text-right">{course.title}</h3>
                       <p className="text-sm text-slate-500 mt-1 line-clamp-2">
-                        {course.description ?? 'No description'}
+                        {course.description ?? t('common.noDescription')}
                       </p>
                       {progress && isEnrolled && (
                         <div className="mt-3 flex items-center gap-3">
                           <span className="text-xs text-slate-400">
-                            {progress.completed_lessons}/{progress.total_lessons} lessons
+                            {t('common.lessonsProgress', { done: progress.completed_lessons, total: progress.total_lessons })}
                           </span>
                           <div className="flex-1">
                             <ProgressBar percent={progress.progress_percent} />
@@ -125,8 +127,8 @@ export function CourseList({ onOpenCourse }: { onOpenCourse: (courseId: string) 
                       )}
                       {!isEnrolled && (
                         <div className="mt-3 flex items-center gap-1.5 text-blue-500 text-sm font-medium">
-                          <span>Enroll & start</span>
-                          <ArrowRight className="h-4 w-4" />
+                          <span>{t('courses.enroll')}</span>
+                          <ArrowRight className="h-4 w-4 rtl:rotate-180" />
                         </div>
                       )}
                     </div>
