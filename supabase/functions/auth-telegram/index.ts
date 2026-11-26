@@ -51,6 +51,17 @@ Deno.serve(async (req: Request) => {
       .single();
     if (error || !user) throw error ?? new Error("Could not load user");
 
+    // Remembered so the bot can message the user in their language. Separate
+    // from the upsert on purpose: if the column is missing (migration 008 not
+    // applied yet), sign-in must still work.
+    if (tgUser.language_code && tgUser.language_code !== user.language_code) {
+      const { error: langErr } = await supabase
+        .from("users")
+        .update({ language_code: tgUser.language_code.slice(0, 16) })
+        .eq("id", user.id);
+      if (langErr) console.warn("auth-telegram: could not store language_code:", langErr.message);
+    }
+
     const { token, expiresAt } = await signJwt(
       {
         aud: "authenticated",

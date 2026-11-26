@@ -9,6 +9,41 @@ import { corsHeaders, json, verifyInitData } from "../_shared/telegram.ts";
 
 const MIN_HOURS_BETWEEN_REMINDERS = 24;
 
+type Lang = "ar" | "en";
+
+/** Same rule as the Mini App: Arabic unless the user's Telegram is in another language. */
+function pickLang(code: string | null | undefined): Lang {
+  const c = code?.toLowerCase();
+  return c && !c.startsWith("ar") ? "en" : "ar";
+}
+
+function reminderText(lang: Lang, title: string, done: number, total: number, current: string | null): string {
+  if (lang === "ar") {
+    const progress = done === 0
+      ? "لم تبدأ بعد، والدرس الأول بانتظارك."
+      : `أنجزت ${done} من ${total} دروس. تابع من حيث توقفت 💪`;
+    const where = current && done > 0 ? `\nآخر درس فتحته: «${current}»` : "";
+    return `📚 تذكير بدورة «${title}»\n\n${progress}${where}`;
+  }
+  const progress = done === 0
+    ? "You haven't started yet. The first lesson is waiting for you."
+    : `You've completed ${done} of ${total} lessons. Pick up where you left off 💪`;
+  const where = current && done > 0 ? `\nLast lesson you opened: "${current}"` : "";
+  return `📚 A reminder about "${title}"\n\n${progress}${where}`;
+}
+
+const buttonLabel: Record<Lang, string> = { ar: "▶️ متابعة الدورة", en: "▶️ Continue the course" };
+
+// The bot's username, for the "continue" link. Cached for the instance's life.
+let botUsername: string | null = null;
+async function getBotUsername(botToken: string): Promise<string | null> {
+  if (botUsername) return botUsername;
+  const res = await fetch(`https://api.telegram.org/bot${botToken}/getMe`).catch(() => null);
+  const data = await res?.json().catch(() => null);
+  botUsername = typeof data?.result?.username === "string" ? data.result.username : null;
+  return botUsername;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -55,7 +90,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: enrollment } = await supabase
       .from("enrollments")
-      .select("id, last_reminded_at, users!inner ( telegram_id )")
+      .select("id, user_id, last_lesson_id, last_reminded_at, users!inner ( telegram_id )")
       .eq("course_id", courseId)
       .eq("user_id", studentId)
       .maybeSingle();
@@ -70,15 +105,42 @@ Deno.serve(async (req: Request) => {
 
     const student = enrollment.users as unknown as { telegram_id: number };
     const title = String(course.title).slice(0, 200);
-    const text =
-      `📚 Don't forget about your course "${title}"!\n\n` +
-      `You haven't been active in a while. Jump back in and continue where you left off.`;
 
-    // No parse_mode: the course title is user-controlled text.
+    // Optional details; a failure here must not block the reminder.
+    const [langRow, progress, moduleRows, currentLesson] = await Promise.all([
+      supabase.from("users").select("language_code").eq("id", enrollment.user_id).maybeSingle(),
+      supabase
+        .from("lesson_progress")
+        .select("id", { count: "exact", head: true })
+        .eq("course_id", courseId)
+        .eq("user_id", enrollment.user_id)
+        .eq("completed", true),
+      supabase.from("modules").select("id").eq("course_id", courseId),
+      enrollment.last_lesson_id
+        ? supabase.from("lessons").select("title").eq("id", enrollment.last_lesson_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const moduleIds = (moduleRows.data ?? []).map((m: { id: string }) => m.id);
+    const { count: totalLessons } = moduleIds.length
+      ? await supabase.from("lessons").select("id", { count: "exact", head: true }).in("module_id", moduleIds)
+      : { count: 0 };
+
+    const lang = pickLang(langRow.data?.language_code);
+    const done = progress.count ?? 0;
+    const total = Math.max(totalLessons ?? 0, done);
+    const current = currentLesson.data?.title ? String(currentLesson.data.title).slice(0, 120) : null;
+    const text = reminderText(lang, title, done, total, current);
+
+    const username = await getBotUsername(botToken);
+    const replyMarkup = username
+      ? { inline_keyboard: [[{ text: buttonLabel[lang], url: `https://t.me/${username}/app?startapp=course_${courseId}` }]] }
+      : undefined;
+
+    // No parse_mode: the course and lesson titles are user-controlled text.
     const tgResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: student.telegram_id, text }),
+      body: JSON.stringify({ chat_id: student.telegram_id, text, reply_markup: replyMarkup }),
     });
     const tgData = await tgResponse.json().catch(() => ({}));
 

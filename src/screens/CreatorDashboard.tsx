@@ -24,10 +24,12 @@ export function CreatorDashboard({
   onEditCourse,
   onCreateCourse,
   onOpenImports,
+  onOpenStudents,
 }: {
   onEditCourse: (courseId: string) => void;
   onCreateCourse: () => void;
   onOpenImports: () => void;
+  onOpenStudents: (courseId: string) => void;
 }) {
   const { user } = useUser();
   const { t } = useI18n();
@@ -178,6 +180,18 @@ export function CreatorDashboard({
                     <ArrowRight className="h-4 w-4 text-slate-300 rtl:rotate-180" />
                   </div>
                 </div>
+                {/* The card itself opens the editor; this opens the students screen. */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenStudents(course.id);
+                  }}
+                  className="mt-3 w-full flex items-center justify-center gap-1.5 pt-3 border-t border-slate-100 text-sm font-semibold text-blue-600 active:opacity-70"
+                >
+                  <Users className="h-4 w-4" />
+                  {t('dash.students')}
+                  <span className="text-xs font-medium text-slate-400 tabular-nums">({s?.studentCount ?? 0})</span>
+                </button>
               </Card>
             );
           })}

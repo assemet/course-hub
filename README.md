@@ -83,6 +83,22 @@ Telegram's native back button (and Android's back key) is driven by
 `useBackButton()` in `src/hooks/useBackButton.ts`: screens and modals register
 a handler, the latest one wins, and the button hides on the main tabs.
 
+## Creator tools
+
+- **Students and progress** (Dashboard → a course → *Students and progress*):
+  each student's completed lessons, last activity and current lesson; filters
+  for inactive (3+ days) and finished students; remind one student or all
+  inactive ones (at most one reminder per student per 24 h).
+- **Lessons tab**: how many students finished each lesson, with the biggest
+  drop-off highlighted ("many stop here").
+- Data comes from `creator_course_students()` / `creator_lesson_stats()`
+  (migration 008). They check the caller owns the course; students' raw
+  progress rows stay private.
+- **Reminders** are written in the student's Telegram language (stored at
+  sign-in), include their progress, and have a *Continue the course* button.
+- **Import all**: the Import Inbox imports every pending message into the
+  chosen module in the order they were sent.
+
 ## Importing from Telegram
 
 Creators forward channel posts to the bot; they land in the **Import Inbox**

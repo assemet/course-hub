@@ -49,7 +49,7 @@ export async function fetchInactiveStudents(creatorId: string, hours = 24): Prom
 export async function sendReminderNotification(
   courseId: string,
   studentUserId: string
-): Promise<{ sent: boolean; note: string }> {
+): Promise<{ sent: boolean; recent?: boolean; note: string }> {
   try {
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
     const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-reminder`, {
@@ -70,6 +70,8 @@ export async function sendReminderNotification(
     if (response.ok && data.sent) {
       return { sent: true, note: 'Reminder sent successfully.' };
     }
+    // Rate limit: this student was already reminded in the last 24 hours.
+    if (response.status === 429) return { sent: false, recent: true, note: data.error ?? '' };
     return { sent: false, note: data.error || `Request failed (${response.status})` };
   } catch (err) {
     return {

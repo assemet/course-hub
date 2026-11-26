@@ -12,6 +12,7 @@ import { Profile } from '@/screens/Profile';
 import { CreatorDashboard } from '@/screens/CreatorDashboard';
 import { CourseEditor } from '@/screens/CourseEditor';
 import { ImportInbox } from '@/screens/ImportInbox';
+import { CourseStudents } from '@/screens/CourseStudents';
 import { useI18n } from '@/lib/i18n';
 import { useBackButton } from '@/hooks/useBackButton';
 import { getDeepLinkCourseId } from '@/lib/deepLink';
@@ -22,6 +23,7 @@ type Screen =
   | { name: 'lesson'; courseId: string; lessonId: string }
   | { name: 'creator-dashboard' }
   | { name: 'import-inbox' }
+  | { name: 'course-students'; courseId: string }
   | { name: 'course-editor'; courseId: string | null; isNew: boolean };
 
 function AppContent() {
@@ -103,6 +105,12 @@ function AppContent() {
             />
           </div>
         );
+      case 'course-students':
+        return (
+          <div className="min-h-screen bg-slate-50 max-w-lg mx-auto">
+            <CourseStudents courseId={currentScreen.courseId} onBack={popScreen} />
+          </div>
+        );
       case 'import-inbox':
         return (
           <div className="min-h-screen bg-slate-50 max-w-lg mx-auto">
@@ -136,6 +144,7 @@ function AppContent() {
             onEditCourse={(courseId) => pushScreen({ name: 'course-editor', courseId, isNew: false })}
             onCreateCourse={() => pushScreen({ name: 'course-editor', courseId: null, isNew: true })}
             onOpenImports={() => pushScreen({ name: 'import-inbox' })}
+            onOpenStudents={(courseId) => pushScreen({ name: 'course-students', courseId })}
           />
         )}
       </div>

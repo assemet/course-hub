@@ -42,6 +42,7 @@ function timingSafeEqual(a: string, b: string): boolean {
 export interface VerifiedTelegramUser {
   id: number;
   first_name?: string;
+  language_code?: string;
   last_name?: string;
   username?: string;
   photo_url?: string;

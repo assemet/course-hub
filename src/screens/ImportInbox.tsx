@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Inbox, Trash2, ArrowRight, RefreshCw, Send, BookOpen, CheckCircle2, Paperclip } from 'lucide-react';
+import { Inbox, Trash2, ArrowRight, RefreshCw, Send, BookOpen, CheckCircle2, Paperclip, ListChecks } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { LoadingScreen } from '@/components/Spinner';
 import { ErrorState, EmptyState } from '@/components/StateViews';
@@ -46,6 +46,7 @@ export function ImportInbox({ onBack }: { onBack: () => void }) {
   const [actionError, setActionError] = useState<string | null>(null); // recoverable
   const [importing, setImporting] = useState<string | null>(null);
   const [justImported, setJustImported] = useState(false);
+  const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null);
   const [selectedCourse, setSelectedCourse] = useState<string>('');
   const [selectedModule, setSelectedModule] = useState<string>('');
 
@@ -106,6 +107,36 @@ export function ImportInbox({ onBack }: { onBack: () => void }) {
       hapticFeedback('error');
     } finally {
       setImporting(null);
+    }
+  };
+
+  /** Imports every pending message, oldest first, so lessons keep the posting order. */
+  const handleImportAll = async () => {
+    if (!selectedCourse || !selectedModule || imports.length === 0) return;
+    const moduleTitle = modulesMap[selectedCourse]?.find((m) => m.id === selectedModule)?.title ?? '';
+    if (!confirm(t('inbox.confirmImportAll', { n: imports.length, module: moduleTitle }))) return;
+
+    const queue = [...imports];
+    setActionError(null);
+    setBulk({ done: 0, total: queue.length });
+    try {
+      // Sequential on purpose: each lesson's position is "after the last one".
+      for (const [i, msg] of queue.entries()) {
+        setImporting(msg.id);
+        await importMessageToLesson(msg, selectedCourse, selectedModule);
+        setImports((list) => list.filter((m) => m.id !== msg.id));
+        setBulk({ done: i + 1, total: queue.length });
+      }
+      hapticFeedback('success');
+      setJustImported(true);
+      setTimeout(() => setJustImported(false), 2000);
+    } catch (err) {
+      // Already-imported messages are gone from the list; the rest stay for a retry.
+      setActionError(errorMessage(err, t('inbox.importFailed')));
+      hapticFeedback('error');
+    } finally {
+      setImporting(null);
+      setBulk(null);
     }
   };
 
@@ -247,6 +278,25 @@ export function ImportInbox({ onBack }: { onBack: () => void }) {
             <h2 className="text-sm font-semibold text-slate-500 tracking-wide">
               {t('inbox.pendingCount', { n: imports.length })}
             </h2>
+            {imports.length > 1 && (
+              <button
+                onClick={handleImportAll}
+                disabled={!selectedCourse || !selectedModule || importing !== null}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-500 text-white text-sm font-semibold active:scale-[0.98] disabled:opacity-50 transition-all"
+              >
+                {bulk ? (
+                  <>
+                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    {t('inbox.importingProgress', { done: bulk.done, total: bulk.total })}
+                  </>
+                ) : (
+                  <>
+                    <ListChecks className="h-4 w-4" />
+                    {t('inbox.importAll', { n: imports.length })}
+                  </>
+                )}
+              </button>
+            )}
             {imports.map((msg) => {
               const canImport = !!selectedCourse && !!selectedModule && importing === null;
               return (

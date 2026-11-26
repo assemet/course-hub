@@ -80,10 +80,43 @@ const en = {
   'dash.empty.desc': 'Create your first course to get started.',
   'dash.createCourse': 'Create Course',
   'dash.inbox.title': 'Import Inbox',
+  'dash.students': 'Students and progress',
   'dash.inbox.pending': (v: Vars) =>
     num(v) === 0
       ? 'Forward posts from your channel to the bot to turn them into lessons'
       : `${enPlural(num(v), 'message', 'messages')} waiting to be imported`,
+
+  // course students (creator)
+  'students.title': 'Students',
+  'students.loading': 'Loading students...',
+  'students.loadFailed': 'Failed to load students',
+  'students.tab.students': 'Students',
+  'students.tab.lessons': 'Lessons',
+  'students.stat.total': 'Students',
+  'students.stat.active': 'Active this week',
+  'students.stat.completed': 'Finished',
+  'students.filter.all': 'All',
+  'students.filter.inactive': 'Inactive',
+  'students.filter.completed': 'Finished',
+  'students.inactiveHint': 'No activity for {days}+ days.',
+  'students.remindAll': (v: Vars) => `Remind all (${num(v)})`,
+  'students.remindingProgress': 'Sending {done}/{total}...',
+  'students.remindAllDone': (v: Vars) => `Sent ${enPlural(num(v), 'reminder', 'reminders')}.`,
+  'students.remindAllNone': 'Everyone here was already reminded in the last 24 hours.',
+  'students.confirmRemindAll': (v: Vars) => `Send a reminder to ${enPlural(num(v), 'student', 'students')}?`,
+  'students.remind': 'Remind',
+  'students.reminded': 'Reminded',
+  'students.remindedRecently': 'Reminded today',
+  'students.remindFailed': "Couldn't send",
+  'students.lastActive': 'Active {when}',
+  'students.currentLesson': 'At: {title}',
+  'students.finished': 'Finished the course',
+  'students.empty.title': 'No students yet',
+  'students.empty.desc': 'Share the course link so students can enroll.',
+  'students.emptyFilter': 'No students in this list.',
+  'students.lessonsHint': 'How many students finished each lesson. A big drop between two lessons shows where students stop.',
+  'students.dropBadge': 'Many stop here',
+  'students.ofStudents': '{done} of {total}',
 
   // import inbox
   'inbox.title': 'Import Inbox',
@@ -108,6 +141,10 @@ const en = {
   'inbox.importing': 'Importing...',
   'inbox.importToModule': 'Import to module',
   'inbox.imported': 'Added as a lesson',
+  'inbox.importAll': (v: Vars) => `Import all to this module (${num(v)})`,
+  'inbox.importingProgress': 'Importing {done}/{total}...',
+  'inbox.confirmImportAll': (v: Vars) =>
+    `Import ${enPlural(num(v), 'message', 'messages')} as lessons into "${v.module}", in the order they were sent?`,
 
   // media types
   'media.video': 'Video',
@@ -326,6 +363,7 @@ const ar: Record<TKey, Entry> = {
   'dash.empty.desc': 'أنشئ دورتك الأولى للبدء.',
   'dash.createCourse': 'إنشاء دورة',
   'dash.inbox.title': 'صندوق الاستيراد',
+  'dash.students': 'الطلاب والتقدّم',
   'dash.inbox.pending': (v) =>
     arPlural(num(v), {
       zero: 'أعد توجيه منشورات قناتك إلى البوت لتحويلها إلى دروس',
@@ -335,6 +373,39 @@ const ar: Record<TKey, Entry> = {
       many: '{n} رسالة بانتظار الاستيراد',
       other: '{n} رسالة بانتظار الاستيراد',
     }),
+
+  'students.title': 'الطلاب',
+  'students.loading': 'جارٍ تحميل الطلاب...',
+  'students.loadFailed': 'تعذّر تحميل الطلاب',
+  'students.tab.students': 'الطلاب',
+  'students.tab.lessons': 'الدروس',
+  'students.stat.total': 'الطلاب',
+  'students.stat.active': 'نشطون هذا الأسبوع',
+  'students.stat.completed': 'أنهوا الدورة',
+  'students.filter.all': 'الكل',
+  'students.filter.inactive': 'غير نشطين',
+  'students.filter.completed': 'أنهوا الدورة',
+  'students.inactiveHint': 'لا نشاط منذ {days} أيام أو أكثر.',
+  'students.remindAll': (v) => `تذكير الكل (${num(v)})`,
+  'students.remindingProgress': 'جارٍ الإرسال {done}/{total}...',
+  'students.remindAllDone': (v) =>
+    arPlural(num(v), { zero: 'لم يُرسل أي تذكير.', one: 'أُرسل تذكير واحد.', two: 'أُرسل تذكيران.', few: 'أُرسلت {n} تذكيرات.', many: 'أُرسل {n} تذكيرًا.', other: 'أُرسل {n} تذكير.' }),
+  'students.remindAllNone': 'كل من في هذه القائمة ذُكّر خلال آخر 24 ساعة.',
+  'students.confirmRemindAll': (v) =>
+    arPlural(num(v), { zero: 'لا يوجد طلاب للتذكير.', one: 'إرسال تذكير إلى طالب واحد؟', two: 'إرسال تذكير إلى طالبين؟', few: 'إرسال تذكير إلى {n} طلاب؟', many: 'إرسال تذكير إلى {n} طالبًا؟', other: 'إرسال تذكير إلى {n} طالب؟' }),
+  'students.remind': 'تذكير',
+  'students.reminded': 'تم التذكير',
+  'students.remindedRecently': 'ذُكّر اليوم',
+  'students.remindFailed': 'تعذّر الإرسال',
+  'students.lastActive': 'نشط {when}',
+  'students.currentLesson': 'عند: {title}',
+  'students.finished': 'أنهى الدورة',
+  'students.empty.title': 'لا يوجد طلاب بعد',
+  'students.empty.desc': 'شارك رابط الدورة ليبدأ الطلاب بالتسجيل.',
+  'students.emptyFilter': 'لا يوجد طلاب في هذه القائمة.',
+  'students.lessonsHint': 'عدد الطلاب الذين أنهوا كل درس. الانخفاض الكبير بين درسين يعني أن الطلاب يتوقفون هناك.',
+  'students.dropBadge': 'يتوقف عنده كثيرون',
+  'students.ofStudents': '{done} من {total}',
 
   'inbox.title': 'صندوق الاستيراد',
   'inbox.loading': 'جارٍ تحميل الرسائل المعاد توجيهها...',
@@ -365,6 +436,12 @@ const ar: Record<TKey, Entry> = {
   'inbox.importing': 'جارٍ الاستيراد...',
   'inbox.importToModule': 'استيراد إلى الوحدة',
   'inbox.imported': 'أُضيفت كدرس',
+  'inbox.importAll': (v) => `استيراد الكل إلى هذه الوحدة (${num(v)})`,
+  'inbox.importingProgress': 'جارٍ الاستيراد {done}/{total}...',
+  'inbox.confirmImportAll': (v) =>
+    arPlural(num(v), {
+      zero: '', one: 'استيراد رسالة واحدة', two: 'استيراد رسالتين', few: 'استيراد {n} رسائل', many: 'استيراد {n} رسالة', other: 'استيراد {n} رسالة',
+    }) + ` كدروس في وحدة «${v.module}» بنفس ترتيب إرسالها؟`,
 
   'media.video': 'فيديو',
   'media.pdf': 'PDF',
@@ -579,6 +656,8 @@ interface I18nValue {
   setLang: (lang: Lang) => void;
   t: TFunction;
   formatDate: (iso: string) => string;
+  /** "3 days ago", "yesterday", "منذ 3 أيام", "أمس" */
+  formatRelative: (iso: string) => string;
 }
 
 const I18nContext = createContext<I18nValue | null>(null);
@@ -605,7 +684,18 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     // Latin digits read more naturally across the Arab world in a mixed UI.
     const locale = lang === 'ar' ? 'ar-u-nu-latn' : 'en';
     const formatDate = (iso: string) => new Date(iso).toLocaleDateString(locale);
-    return { lang, dir: lang === 'ar' ? 'rtl' : 'ltr', setLang, t, formatDate };
+    const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+    const formatRelative = (iso: string) => {
+      const seconds = (new Date(iso).getTime() - Date.now()) / 1000;
+      const abs = Math.abs(seconds);
+      if (abs < 60) return rtf.format(0, 'second');
+      if (abs < 3600) return rtf.format(Math.round(seconds / 60), 'minute');
+      if (abs < 86400) return rtf.format(Math.round(seconds / 3600), 'hour');
+      if (abs < 86400 * 30) return rtf.format(Math.round(seconds / 86400), 'day');
+      if (abs < 86400 * 365) return rtf.format(Math.round(seconds / (86400 * 30)), 'month');
+      return rtf.format(Math.round(seconds / (86400 * 365)), 'year');
+    };
+    return { lang, dir: lang === 'ar' ? 'rtl' : 'ltr', setLang, t, formatDate, formatRelative };
   }, [lang, setLang]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

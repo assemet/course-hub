@@ -1,6 +1,7 @@
 import { getTelegramStartParam } from './telegram';
 
-const BOT_USERNAME = 'course_tracker_bot';
+// Set VITE_BOT_USERNAME (without @) to your bot's username.
+const BOT_USERNAME = (import.meta.env.VITE_BOT_USERNAME as string | undefined)?.replace(/^@/, '') || 'course_tracker_bot';
 
 /** Direct chat with the bot, where creators forward posts to import them. */
 export function buildBotChatLink(): string {
