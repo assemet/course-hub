@@ -43,7 +43,18 @@ export interface Lesson {
   position: number;
   created_at: string;
   updated_at: string;
+  // Telegram file attached on import (served by the lesson-media function).
+  media_type: LessonMediaType | null;
+  media_kind: TelegramFileKind | null;
+  media_file_id: string | null;
+  media_file_name: string | null;
+  media_mime_type: string | null;
+  media_file_size: number | null;
 }
+
+/** Exact Telegram object type of a file_id; decides how the bot can resend it. */
+export type TelegramFileKind = 'photo' | 'video' | 'video_note' | 'animation' | 'document' | 'audio' | 'voice';
+export type LessonMediaType = 'video' | 'pdf' | 'image' | 'file' | 'audio';
 
 export type ResourceType = 'pdf' | 'file' | 'link' | 'telegram';
 
@@ -93,7 +104,7 @@ export interface CourseProgress {
 
 export type LessonState = 'not_started' | 'in_progress' | 'completed';
 
-export type ImportMediaType = 'video' | 'pdf' | 'text' | 'link' | 'image' | 'file';
+export type ImportMediaType = 'video' | 'pdf' | 'text' | 'link' | 'image' | 'file' | 'audio';
 export type ImportStatus = 'pending' | 'imported';
 
 export interface ImportedMessage {
@@ -104,6 +115,11 @@ export interface ImportedMessage {
   parsed_title: string | null;
   media_type: ImportMediaType;
   media_url: string | null;
+  file_id: string | null;
+  file_kind: TelegramFileKind | null;
+  file_name: string | null;
+  file_mime_type: string | null;
+  file_size: number | null;
   status: ImportStatus;
   created_at: string;
 }

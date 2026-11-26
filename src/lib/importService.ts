@@ -71,6 +71,17 @@ export async function importMessageToLesson(
     content: message.raw_content ?? null,
     telegram_url: message.media_url ?? null,
     position: existingLessons?.length ?? 0,
+    // Carry the Telegram file over so the lesson can show or send it.
+    ...(message.file_id && message.file_kind && message.media_type !== 'text' && message.media_type !== 'link'
+      ? {
+          media_type: message.media_type,
+          media_kind: message.file_kind,
+          media_file_id: message.file_id,
+          media_file_name: message.file_name,
+          media_mime_type: message.file_mime_type,
+          media_file_size: message.file_size,
+        }
+      : {}),
   });
   if (lessonErr) throw lessonErr;
 

@@ -38,6 +38,8 @@ interface TelegramWebApp {
   };
   openTelegramLink: (url: string) => void;
   openLink: (url: string) => void;
+  /** Bot API 6.9+: asks the user to let the bot message them. */
+  requestWriteAccess?: (callback?: (granted: boolean) => void) => void;
   HapticFeedback: {
     impactOccurred: (style: string) => void;
     notificationOccurred: (type: string) => void;
@@ -135,6 +137,23 @@ export function openExternalLink(url: string): void {
   } else {
     window.open(safe, '_blank', 'noopener,noreferrer');
   }
+}
+
+/**
+ * Asks the user to allow the bot to message them (needed before the bot can
+ * send them files if they never started a chat with it).
+ * Resolves false when unsupported or declined.
+ */
+export function requestBotWriteAccess(): Promise<boolean> {
+  const tg = getTelegramWebApp();
+  if (!tg?.requestWriteAccess) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    try {
+      tg.requestWriteAccess!((granted) => resolve(granted));
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
 export function openTelegramLink(url: string): void {

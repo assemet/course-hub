@@ -116,6 +116,18 @@ const en = {
   'media.link': 'Link',
   'media.image': 'Image',
   'media.file': 'File',
+  'media.audio': 'Audio',
+
+  // lesson attachments
+  'lessonMedia.sendToChat': 'Send to my Telegram chat',
+  'lessonMedia.saveImage': 'Send to my chat to save it',
+  'lessonMedia.sending': 'Sending...',
+  'lessonMedia.sent': 'Sent to your chat with the bot',
+  'lessonMedia.openChat': 'Open chat',
+  'lessonMedia.hint': 'The file will arrive in your chat with the bot, where you can open, play or save it.',
+  'lessonMedia.needsAccess': 'The bot needs permission to message you. Open the bot, press Start, then try again.',
+  'lessonMedia.failed': "Couldn't send the file. Please try again later.",
+  'lessonMedia.imageFailed': "This image can't be shown here, but you can receive it in your chat.",
 
   // resource types
   'resource.pdf': 'PDF',
@@ -350,6 +362,17 @@ const ar: Record<TKey, Entry> = {
   'media.link': 'رابط',
   'media.image': 'صورة',
   'media.file': 'ملف',
+  'media.audio': 'تسجيل صوتي',
+
+  'lessonMedia.sendToChat': 'إرسال إلى محادثتي في تيليغرام',
+  'lessonMedia.saveImage': 'أرسلها إلى محادثتي لحفظها',
+  'lessonMedia.sending': 'جارٍ الإرسال...',
+  'lessonMedia.sent': 'أُرسل إلى محادثتك مع البوت',
+  'lessonMedia.openChat': 'فتح المحادثة',
+  'lessonMedia.hint': 'سيصلك الملف في محادثتك مع البوت، وهناك تفتحه أو تشغّله أو تحفظه.',
+  'lessonMedia.needsAccess': 'يحتاج البوت إذناً لمراسلتك. افتح البوت واضغط «ابدأ»، ثم أعد المحاولة.',
+  'lessonMedia.failed': 'تعذّر إرسال الملف. حاول مرة أخرى لاحقاً.',
+  'lessonMedia.imageFailed': 'لا يمكن عرض هذه الصورة هنا، لكن يمكنك استلامها في محادثتك.',
 
   'resource.pdf': 'PDF',
   'resource.file': 'ملف',

@@ -74,6 +74,27 @@ Creators forward channel posts to the bot; they land in the **Import Inbox**
 creator mode can import; the bot replies in the chat to confirm, or to explain
 why a message was not imported.
 
+### Attachments (photos, PDFs, videos, audio, files)
+
+The bot stores the Telegram `file_id` of each attachment; the file itself stays
+on Telegram (no storage cost, no size limit, works for private channels).
+On the lesson page:
+
+- **Images** are shown inline (downloaded through the `lesson-media` function).
+- **PDFs, videos, audio and other files**: the student taps *Send to my Telegram
+  chat* and the bot sends the file to them, where Telegram's own viewer/player
+  opens it. If the student never started the bot, the app asks for permission.
+
+`lesson-media` reads the lesson with the student's own permissions (RLS), so a
+student only gets files from lessons they can see. Deploy it with:
+
+```bash
+supabase functions deploy lesson-media
+```
+
+A `file_id` belongs to one bot: if you ever switch to a different bot token,
+re-import the posts.
+
 ## Notes
 
 - `course_tracker_full_schema.sql` is an old all-in-one script with demo data and

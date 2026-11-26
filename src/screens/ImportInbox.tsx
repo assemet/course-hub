@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Inbox, Trash2, ArrowRight, Video, FileText, Link as LinkIcon,
-  Image as ImageIcon, File as FileIcon, Type, RefreshCw, Send, BookOpen, CheckCircle2,
+  Image as ImageIcon, File as FileIcon, Type, RefreshCw, Send, BookOpen, CheckCircle2, Music, Paperclip,
 } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { LoadingScreen } from '@/components/Spinner';
@@ -14,6 +14,7 @@ import { fetchPendingImports, deleteImport, importMessageToLesson } from '@/lib/
 import { fetchCoursesByCreator, fetchModulesWithLessons } from '@/lib/courseService';
 import { hapticFeedback, openTelegramLink } from '@/lib/telegram';
 import { buildBotChatLink } from '@/lib/deepLink';
+import { formatFileSize, splitFileName } from '@/lib/mediaService';
 import type { ImportedMessage, ImportMediaType, Course, ModuleWithLessons } from '@/lib/types';
 
 const mediaIcons: Record<ImportMediaType, typeof FileText> = {
@@ -23,6 +24,7 @@ const mediaIcons: Record<ImportMediaType, typeof FileText> = {
   link: LinkIcon,
   image: ImageIcon,
   file: FileIcon,
+  audio: Music,
 };
 
 const mediaBadgeColors: Record<ImportMediaType, string> = {
@@ -32,6 +34,7 @@ const mediaBadgeColors: Record<ImportMediaType, string> = {
   link: 'bg-blue-50 text-blue-500',
   image: 'bg-purple-50 text-purple-500',
   file: 'bg-teal-50 text-teal-500',
+  audio: 'bg-purple-50 text-purple-500',
 };
 
 const mediaLabelKeys: Record<ImportMediaType, TKey> = {
@@ -41,6 +44,7 @@ const mediaLabelKeys: Record<ImportMediaType, TKey> = {
   link: 'media.link',
   image: 'media.image',
   file: 'media.file',
+  audio: 'media.audio',
 };
 
 export function ImportInbox({ onBack }: { onBack: () => void }) {
@@ -277,6 +281,20 @@ export function ImportInbox({ onBack }: { onBack: () => void }) {
                       {msg.raw_content && (
                         <p dir="auto" className="text-xs text-slate-500 mt-1 line-clamp-3 text-start">
                           {msg.raw_content}
+                        </p>
+                      )}
+                      {msg.file_id && (
+                        <p className="flex items-center gap-1 text-xs text-slate-500 mt-1 min-w-0">
+                          <Paperclip className="h-3 w-3 flex-shrink-0" />
+                          <span dir="auto" className="truncate">
+                            {splitFileName(msg.file_name).base ?? t(mediaLabelKeys[msg.media_type] ?? 'media.file')}
+                          </span>
+                          {splitFileName(msg.file_name).ext && (
+                            <><span aria-hidden="true">·</span><bdi className="flex-shrink-0">{splitFileName(msg.file_name).ext}</bdi></>
+                          )}
+                          {formatFileSize(msg.file_size) && (
+                            <><span aria-hidden="true">·</span><bdi className="flex-shrink-0">{formatFileSize(msg.file_size)}</bdi></>
+                          )}
                         </p>
                       )}
                       {msg.media_url && (

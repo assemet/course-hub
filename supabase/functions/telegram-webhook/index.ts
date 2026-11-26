@@ -13,23 +13,45 @@
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { corsHeaders, json } from "../_shared/telegram.ts";
 
-interface Detected {
-  mediaType: "video" | "pdf" | "text" | "link" | "image" | "file";
-  mediaUrl: string | null;
+type MediaType = "video" | "pdf" | "text" | "link" | "image" | "file" | "audio";
+type FileKind = "photo" | "video" | "video_note" | "animation" | "document" | "audio" | "voice";
+
+/** The Telegram file behind a post. `kind` decides which Bot API method can resend it. */
+interface TgFileRef {
+  kind: FileKind;
+  fileId: string;
+  fileName: string | null;
+  mimeType: string | null;
+  fileSize: number | null;
 }
 
-// The subset of the Telegram Message object this function reads.
+interface Detected {
+  mediaType: MediaType;
+  mediaUrl: string | null;
+  file: TgFileRef | null;
+}
+
+// The subset of the Telegram objects this function reads.
+interface TgFile {
+  file_id?: string;
+  file_name?: string;
+  mime_type?: string;
+  file_size?: number;
+}
+
 interface TgMessage {
   message_id?: number;
   text?: string;
   caption?: string;
   chat?: { id?: number; type?: string };
   from?: { id?: number; language_code?: string };
-  video?: unknown;
-  video_note?: unknown;
-  animation?: unknown;
-  document?: { mime_type?: string };
-  photo?: unknown;
+  video?: TgFile;
+  video_note?: TgFile;
+  animation?: TgFile;
+  document?: TgFile;
+  audio?: TgFile & { title?: string };
+  voice?: TgFile;
+  photo?: TgFile[];
   forward_origin?: {
     type?: string;
     message_id?: number;
@@ -42,31 +64,66 @@ function firstUrl(text: string): string | null {
   return match ? match[0] : null;
 }
 
+function fileRef(kind: FileKind, f: TgFile | undefined, fallbackMime: string | null = null): TgFileRef | null {
+  if (!f?.file_id) return null;
+  return {
+    kind,
+    fileId: f.file_id,
+    fileName: f.file_name ?? null,
+    mimeType: f.mime_type ?? fallbackMime,
+    fileSize: typeof f.file_size === "number" ? f.file_size : null,
+  };
+}
+
+/** The attachment of a message and the media type it should be shown as. */
+function detectAttachment(message: TgMessage): { mediaType: MediaType; file: TgFileRef } | null {
+  const attach = (mediaType: MediaType, file: TgFileRef | null) => (file ? { mediaType, file } : null);
+
+  if (message.photo?.length) {
+    // Telegram sends several sizes, smallest first; keep the largest.
+    return attach("image", fileRef("photo", message.photo[message.photo.length - 1], "image/jpeg"));
+  }
+  if (message.video) return attach("video", fileRef("video", message.video));
+  if (message.video_note) return attach("video", fileRef("video_note", message.video_note, "video/mp4"));
+  if (message.animation) return attach("video", fileRef("animation", message.animation));
+  if (message.audio) {
+    const ref = fileRef("audio", message.audio);
+    if (ref && !ref.fileName && message.audio.title) ref.fileName = message.audio.title;
+    return attach("audio", ref);
+  }
+  if (message.voice) return attach("audio", fileRef("voice", message.voice, "audio/ogg"));
+  if (message.document) {
+    const mime = message.document.mime_type ?? "";
+    const mediaType: MediaType =
+      mime === "application/pdf" || /\.pdf$/i.test(message.document.file_name ?? "") ? "pdf"
+      : mime.startsWith("image/") ? "image"
+      : mime.startsWith("video/") ? "video"
+      : mime.startsWith("audio/") ? "audio"
+      : "file";
+    return attach(mediaType, fileRef("document", message.document));
+  }
+  return null;
+}
+
 function detectMediaType(message: TgMessage, text: string): Detected {
   // Native attachments take priority over links in the caption.
-  if (message.video || message.video_note || message.animation) {
-    return { mediaType: "video", mediaUrl: channelPostUrl(message) };
-  }
-  if (message.document) {
-    const isPdf = message.document.mime_type === "application/pdf";
-    return { mediaType: isPdf ? "pdf" : "file", mediaUrl: channelPostUrl(message) };
-  }
-  if (message.photo) {
-    return { mediaType: "image", mediaUrl: channelPostUrl(message) };
+  const attachment = detectAttachment(message);
+  if (attachment) {
+    return { mediaType: attachment.mediaType, mediaUrl: channelPostUrl(message), file: attachment.file };
   }
 
   const lower = text.toLowerCase();
   if (/(youtube\.com\/(watch|shorts)|youtu\.be\/)/.test(lower)) {
     const match = text.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)[\w-]+/);
-    return { mediaType: "video", mediaUrl: match ? match[0] : null };
+    return { mediaType: "video", mediaUrl: match ? match[0] : null, file: null };
   }
   if (/https?:\/\/[^\s]+\.pdf(\?[^\s]*)?/i.test(text)) {
-    return { mediaType: "pdf", mediaUrl: text.match(/https?:\/\/[^\s]+\.pdf[^\s]*/i)![0] };
+    return { mediaType: "pdf", mediaUrl: text.match(/https?:\/\/[^\s]+\.pdf[^\s]*/i)![0], file: null };
   }
   const url = firstUrl(text);
-  if (url) return { mediaType: "link", mediaUrl: url };
+  if (url) return { mediaType: "link", mediaUrl: url, file: null };
 
-  return { mediaType: "text", mediaUrl: channelPostUrl(message) };
+  return { mediaType: "text", mediaUrl: channelPostUrl(message), file: null };
 }
 
 /** Public t.me link to the original post, when forwarded from a public channel. */
@@ -107,6 +164,17 @@ const replies = {
  */
 function reply(chatId: number, text: string): Response {
   return json({ method: "sendMessage", chat_id: chatId, text });
+}
+
+const fallbackTitles: Record<Lang, Record<MediaType, string>> = {
+  ar: { video: "فيديو", pdf: "ملف PDF", image: "صورة", file: "ملف", audio: "تسجيل صوتي", link: "رابط", text: "بدون عنوان" },
+  en: { video: "Video", pdf: "PDF file", image: "Image", file: "File", audio: "Audio", link: "Link", text: "Untitled" },
+};
+
+/** File name without its extension, e.g. "Lesson 3.pdf" -> "Lesson 3". */
+function baseName(fileName: string | null): string | null {
+  const name = fileName?.replace(/\.[^.\s]{1,5}$/, "").trim();
+  return name ? name : null;
 }
 
 function extractTitle(text: string, fallback: string): string {
@@ -165,8 +233,8 @@ Deno.serve(async (req: Request) => {
     if (!dbUser) return reply(chatId, replies.notRegistered[lang]);
     if (dbUser.role !== "creator") return reply(chatId, replies.notCreator[lang]);
 
-    const { mediaType, mediaUrl } = detectMediaType(message, text);
-    const parsedTitle = extractTitle(text, mediaType === "text" ? "Untitled" : `Imported ${mediaType}`);
+    const { mediaType, mediaUrl, file } = detectMediaType(message, text);
+    const parsedTitle = extractTitle(text, baseName(file?.fileName ?? null) ?? fallbackTitles[lang][mediaType]);
 
     const { error: insertErr } = await supabase.from("imported_messages").upsert(
       {
@@ -176,6 +244,11 @@ Deno.serve(async (req: Request) => {
         parsed_title: parsedTitle,
         media_type: mediaType,
         media_url: mediaUrl,
+        file_id: file?.fileId ?? null,
+        file_kind: file?.kind ?? null,
+        file_name: file?.fileName ?? null,
+        file_mime_type: file?.mimeType ?? null,
+        file_size: file?.fileSize ?? null,
         status: "pending",
       },
       { onConflict: "creator_id,telegram_message_id", ignoreDuplicates: true },

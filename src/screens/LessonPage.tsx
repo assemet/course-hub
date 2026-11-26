@@ -4,6 +4,7 @@ import { Card } from '@/components/Card';
 import { LoadingScreen } from '@/components/Spinner';
 import { ErrorState } from '@/components/StateViews';
 import { AppHeader } from '@/components/AppHeader';
+import { LessonMedia } from '@/components/LessonMedia';
 import { useUser } from '@/hooks/useUser';
 import {
   fetchCourseById,
@@ -167,6 +168,9 @@ export function LessonPage({
             <p dir="auto" className="text-sm text-slate-500 mt-2 text-start">{currentLesson.description}</p>
           )}
         </div>
+
+        {/* Attached Telegram file (image inline, other files sent to the chat) */}
+        <LessonMedia key={currentLesson.id} lesson={currentLesson} />
 
         {/* Telegram content link */}
         {currentLesson.telegram_url && (
