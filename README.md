@@ -97,6 +97,32 @@ a handler, the latest one wins, and the button hides on the main tabs.
   ignoring Arabic spelling variants: hamza forms (أ/إ/آ → ا, ؤ/ئ → ء),
   ة/ه, ى/ي, diacritics, tatweel and Arabic-Indic digits (`src/lib/search.ts`).
 
+## Quizzes and certificates
+
+**Module quizzes** (Course editor → Modules → *Module quiz*): multiple-choice
+questions (2-6 answers), optional explanation, pass mark per quiz (default 70%).
+
+- Correct answers never reach students: column privileges hide
+  `quiz_questions.correct_index`/`explanation`; `submit_quiz()` grades in the
+  database and returns corrections only after an attempt. Students can't write
+  attempts directly. Creators read answers via `creator_quiz()`.
+- *Require passing module quizzes* (course setting, off by default): a module
+  opens only after the previous modules' quizzes are passed (enforced in the
+  app; the course page, lesson list and lesson page show locks).
+- After the last lesson of a module, the next step is that module's quiz.
+
+**Certificates**: when every lesson is completed and every quiz passed,
+`issue_certificate()` (checked in the database) stores a snapshot with a
+10-character verification code; the student confirms the name first (fixed
+afterwards). The image is drawn in the app (`renderCertificate`, Arabic or
+English) and `certificate-send` has the bot send it to the student with a
+*Verify* button. The link `t.me/<bot>/app?startapp=cert_<CODE>` opens the
+verification screen (`verify_certificate()`). The image is only a picture; the
+code is what proves a certificate.
+
+Deploy: `supabase functions deploy certificate-send` (and redeploy
+`send-reminder`, which now shares `getBotUsername`).
+
 ## Creator tools
 
 - **Students and progress** (Dashboard → a course → *Students and progress*):

@@ -12,34 +12,35 @@ export function buildCourseDeepLink(courseId: string): string {
   return `https://t.me/${BOT_USERNAME}/app?startapp=course_${courseId}`;
 }
 
-export function parseStartAppParam(startApp: string | null): { courseId: string } | null {
+export function buildCertificateVerifyLink(code: string): string {
+  return `https://t.me/${BOT_USERNAME}/app?startapp=cert_${code}`;
+}
+
+export type DeepLinkTarget = { courseId: string } | { certificateCode: string };
+
+export function parseStartAppParam(startApp: string | null): DeepLinkTarget | null {
   if (!startApp) return null;
-  const match = startApp.match(/^course_(.+)$/);
-  if (match) return { courseId: match[1] };
+  const course = startApp.match(/^course_(.+)$/);
+  if (course) return { courseId: course[1] };
+  // Certificate codes are 10 characters from [A-Z2-9].
+  const cert = startApp.match(/^cert_([A-Za-z0-9]{6,20})$/);
+  if (cert) return { certificateCode: cert[1].toUpperCase() };
   return null;
 }
 
-export function getDeepLinkCourseId(): string | null {
+/** What the Mini App was opened for (a course or a certificate to verify), if anything. */
+export function getDeepLinkTarget(): DeepLinkTarget | null {
   // Preferred: the SDK exposes the `startapp` value as start_param.
   const sdkParam = parseStartAppParam(getTelegramStartParam());
-  if (sdkParam) return sdkParam.courseId;
+  if (sdkParam) return sdkParam;
 
-  // Fallbacks for clients that only pass it through the launch URL.
+  // Fallbacks for clients that only pass it through the launch URL (query or hash).
+  const fromQuery = new URLSearchParams(window.location.search).get('tgWebAppStartParam');
+  const fromHash = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('tgWebAppStartParam');
+  return parseStartAppParam(fromQuery) ?? parseStartAppParam(fromHash);
+}
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const tgWebAppStartParam = urlParams.get('tgWebAppStartParam');
-  if (tgWebAppStartParam) {
-    const parsed = parseStartAppParam(tgWebAppStartParam);
-    if (parsed) return parsed.courseId;
-  }
-
-  // Also check hash params
-  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-  const hashStartParam = hashParams.get('tgWebAppStartParam');
-  if (hashStartParam) {
-    const parsed = parseStartAppParam(hashStartParam);
-    if (parsed) return parsed.courseId;
-  }
-
-  return null;
+export function getDeepLinkCourseId(): string | null {
+  const target = getDeepLinkTarget();
+  return target && 'courseId' in target ? target.courseId : null;
 }

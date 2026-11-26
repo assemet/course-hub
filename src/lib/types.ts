@@ -22,6 +22,8 @@ export interface Course {
   slug: string | null;
   /** Bot sends this course's files with Telegram's protect_content (no forwarding/saving). */
   protect_content: boolean;
+  /** Next module opens only after the previous modules' quizzes are passed. */
+  quiz_gating: boolean;
   created_at: string;
   updated_at: string;
 }

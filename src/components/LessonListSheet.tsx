@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, X, Lock } from 'lucide-react';
 import { useI18n, type TKey } from '@/lib/i18n';
 import { useBackButton } from '@/hooks/useBackButton';
 import { formatDuration } from '@/lib/mediaService';
@@ -21,12 +21,15 @@ export function LessonListSheet({
   modules,
   completedSet,
   currentLessonId,
+  lockedModuleIds,
   onSelect,
   onClose,
 }: {
   modules: ModuleWithLessons[];
   completedSet: Set<string>;
   currentLessonId: string;
+  /** Modules closed by quiz gating: shown with a lock, not selectable. */
+  lockedModuleIds?: Set<string>;
   onSelect: (lessonId: string) => void;
   onClose: () => void;
 }) {
@@ -76,18 +79,24 @@ export function LessonListSheet({
                 number++;
                 const isCurrent = l.id === currentLessonId;
                 const isDone = completedSet.has(l.id);
+                const isLocked = !!lockedModuleIds?.has(m.id);
                 const duration = l.media_type === 'video' || l.media_type === 'audio' ? formatDuration(l.media_duration) : null;
                 return (
                   <button
                     key={l.id}
                     ref={isCurrent ? currentRef : undefined}
                     onClick={() => (isCurrent ? onClose() : onSelect(l.id))}
+                    disabled={isLocked}
                     aria-current={isCurrent ? 'step' : undefined}
-                    className={`w-full flex items-center gap-3 px-5 py-3 text-start transition-colors ${
-                      isCurrent ? 'bg-blue-50' : 'hover:bg-slate-50 active:bg-slate-100'
+                    className={`w-full flex items-center gap-3 px-5 py-3 text-start transition-colors disabled:opacity-50 ${
+                      isCurrent ? 'bg-blue-50' : 'enabled:hover:bg-slate-50 enabled:active:bg-slate-100'
                     }`}
                   >
-                    {isDone ? (
+                    {isLocked ? (
+                      <span className="h-7 w-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                        <Lock className="h-3.5 w-3.5 text-slate-400" />
+                      </span>
+                    ) : isDone ? (
                       <span className="h-7 w-7 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
                         <Check className="h-4 w-4 text-white" strokeWidth={3} />
                       </span>

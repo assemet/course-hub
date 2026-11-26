@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Plus, ChevronDown, ChevronUp, Trash2, Edit2,
   Save, X, Globe, GlobeLock, FileText, Link as LinkIcon, Download, Send,
-  BookOpen, ShieldCheck, ShieldOff,
+  BookOpen, ShieldCheck, ShieldOff, ClipboardList, Lock, LockOpen,
 } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { LoadingScreen } from '@/components/Spinner';
@@ -18,6 +18,8 @@ import {
 import { hapticFeedback, sanitizeUrl } from '@/lib/telegram';
 import { useI18n, type TKey } from '@/lib/i18n';
 import { useBackButton } from '@/hooks/useBackButton';
+import { QuizEditor } from '@/components/QuizEditor';
+import { fetchCourseQuizStatus, type QuizStatus } from '@/lib/quizService';
 import { errorMessage } from '@/lib/errors';
 import type { Course, ModuleWithLessons, Lesson, Resource, ResourceType } from '@/lib/types';
 
@@ -52,6 +54,8 @@ export function CourseEditor({
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
   const [moduleTitleInput, setModuleTitleInput] = useState('');
   const [editingLesson, setEditingLesson] = useState<{ moduleId: string; lesson: Lesson | null } | null>(null);
+  const [editingQuiz, setEditingQuiz] = useState<{ moduleId: string; title: string } | null>(null);
+  const [quizStatus, setQuizStatus] = useState<Map<string, QuizStatus>>(new Map());
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
@@ -84,8 +88,13 @@ export function CourseEditor({
       setCoverUrl(c.cover_url ?? '');
       setSlug(c.slug ?? '');
 
-      const mods = await fetchModulesWithLessons(courseId);
+      const [mods, quizzes] = await Promise.all([
+        fetchModulesWithLessons(courseId),
+        // Optional: the editor still works if quizzes can't be loaded.
+        fetchCourseQuizStatus(courseId).catch(() => new Map<string, QuizStatus>()),
+      ]);
       setModules(mods);
+      setQuizStatus(quizzes);
       if (mods.length > 0) {
         setExpandedModules(new Set([mods[0].id]));
       }
@@ -179,6 +188,29 @@ export function CourseEditor({
       hapticFeedback('success');
     } catch (err) {
       setActionError(errorMessage(err, t('editor.statusFailed')));
+    }
+  };
+
+  // === Quiz gating ===
+  const handleToggleGating = async () => {
+    if (!course) return;
+    try {
+      const next = !course.quiz_gating;
+      const { error: err } = await supabase.from('courses').update({ quiz_gating: next }).eq('id', course.id);
+      if (err) throw err;
+      setCourse({ ...course, quiz_gating: next });
+      hapticFeedback('success');
+    } catch (err) {
+      setActionError(errorMessage(err, t('editor.gatingFailed')));
+    }
+  };
+
+  const refreshQuizStatus = async () => {
+    if (!course) return;
+    try {
+      setQuizStatus(await fetchCourseQuizStatus(course.id));
+    } catch {
+      // keep the previous counts
     }
   };
 
@@ -605,6 +637,43 @@ export function CourseEditor({
                 </div>
               </Card>
             )}
+
+            {course && (
+              <Card className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    course.quiz_gating ? 'bg-purple-50' : 'bg-slate-100'
+                  }`}>
+                    {course.quiz_gating ? (
+                      <Lock className="h-5 w-5 text-purple-500" />
+                    ) : (
+                      <LockOpen className="h-5 w-5 text-slate-400" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p id="gating-label" className="text-sm font-semibold text-slate-900">{t('editor.gating.title')}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {course.quiz_gating ? t('editor.gating.on') : t('editor.gating.off')}
+                    </p>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={course.quiz_gating}
+                    aria-labelledby="gating-label"
+                    onClick={handleToggleGating}
+                    className={`relative h-7 w-12 flex-shrink-0 rounded-full transition-colors ${
+                      course.quiz_gating ? 'bg-purple-500' : 'bg-slate-300'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                        course.quiz_gating ? 'start-6' : 'start-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </Card>
+            )}
           </div>
         )}
 
@@ -763,6 +832,18 @@ export function CourseEditor({
                             <Plus className="h-4 w-4" />
                             {t('editor.addLesson')}
                           </button>
+                          <button
+                            onClick={() => setEditingQuiz({ moduleId: module.id, title: module.title })}
+                            className="w-full flex items-center gap-2 py-2 px-2 rounded-lg text-purple-600 text-sm font-medium hover:bg-purple-50 transition-colors"
+                          >
+                            <ClipboardList className="h-4 w-4" />
+                            <span className="flex-1 text-start">{t('editor.moduleQuiz')}</span>
+                            <span className="text-xs font-normal text-slate-400">
+                              {(quizStatus.get(module.id)?.question_count ?? 0) > 0
+                                ? t('editor.quizQuestions', { n: quizStatus.get(module.id)!.question_count })
+                                : t('editor.noQuiz')}
+                            </span>
+                          </button>
                         </div>
                       )}
                     </Card>
@@ -773,6 +854,17 @@ export function CourseEditor({
           </div>
         )}
       </div>
+
+      {editingQuiz && (
+        <QuizEditor
+          moduleId={editingQuiz.moduleId}
+          moduleTitle={editingQuiz.title}
+          onClose={() => {
+            setEditingQuiz(null);
+            refreshQuizStatus();
+          }}
+        />
+      )}
 
       {/* Lesson Editor Modal */}
       {editingLesson && course && (

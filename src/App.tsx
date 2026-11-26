@@ -15,7 +15,10 @@ import { ImportInbox } from '@/screens/ImportInbox';
 import { CourseStudents } from '@/screens/CourseStudents';
 import { useI18n } from '@/lib/i18n';
 import { useBackButton } from '@/hooks/useBackButton';
-import { getDeepLinkCourseId } from '@/lib/deepLink';
+import { getDeepLinkTarget } from '@/lib/deepLink';
+import { QuizScreen } from '@/screens/QuizScreen';
+import { CertificateScreen } from '@/screens/CertificateScreen';
+import { VerifyCertificateScreen } from '@/screens/VerifyCertificateScreen';
 
 type Screen =
   | { name: 'tab' }
@@ -24,6 +27,9 @@ type Screen =
   | { name: 'creator-dashboard' }
   | { name: 'import-inbox' }
   | { name: 'course-students'; courseId: string }
+  | { name: 'quiz'; courseId: string; moduleId: string }
+  | { name: 'certificate'; courseId: string }
+  | { name: 'verify-certificate'; code: string }
   | { name: 'course-editor'; courseId: string | null; isNew: boolean };
 
 function AppContent() {
@@ -39,9 +45,11 @@ function AppContent() {
   // Handle deep link on mount
   useEffect(() => {
     if (!user) return;
-    const deepLinkCourseId = getDeepLinkCourseId();
-    if (deepLinkCourseId) {
-      setScreenStack([{ name: 'course', courseId: deepLinkCourseId }]);
+    const target = getDeepLinkTarget();
+    if (target && 'courseId' in target) {
+      setScreenStack([{ name: 'course', courseId: target.courseId }]);
+    } else if (target) {
+      setScreenStack([{ name: 'verify-certificate', code: target.certificateCode }]);
     }
   }, [user]);
 
@@ -79,6 +87,8 @@ function AppContent() {
               courseId={currentScreen.courseId}
               onBack={popScreen}
               onOpenLesson={(courseId, lessonId) => pushScreen({ name: 'lesson', courseId, lessonId })}
+              onOpenQuiz={(courseId, moduleId) => pushScreen({ name: 'quiz', courseId, moduleId })}
+              onOpenCertificate={(courseId) => pushScreen({ name: 'certificate', courseId })}
             />
           </div>
         );
@@ -92,7 +102,42 @@ function AppContent() {
               onNavigateLesson={(courseId, lessonId) => {
                 setScreenStack((s) => [...s.slice(0, -1), { name: 'lesson', courseId, lessonId }]);
               }}
+              onOpenQuiz={(courseId, moduleId) => {
+                // The quiz takes the lesson's place; back returns to the course.
+                setScreenStack((s) => [...s.slice(0, -1), { name: 'quiz', courseId, moduleId }]);
+              }}
+              onOpenCertificate={(courseId) => {
+                setScreenStack((s) => [...s.slice(0, -1), { name: 'certificate', courseId }]);
+              }}
             />
+          </div>
+        );
+      case 'quiz':
+        return (
+          <div className="min-h-screen bg-slate-50 max-w-lg mx-auto">
+            <QuizScreen
+              courseId={currentScreen.courseId}
+              moduleId={currentScreen.moduleId}
+              onBack={popScreen}
+              onGoToLesson={(courseId, lessonId) => {
+                setScreenStack((s) => [...s.slice(0, -1), { name: 'lesson', courseId, lessonId }]);
+              }}
+              onOpenCertificate={(courseId) => {
+                setScreenStack((s) => [...s.slice(0, -1), { name: 'certificate', courseId }]);
+              }}
+            />
+          </div>
+        );
+      case 'certificate':
+        return (
+          <div className="min-h-screen bg-slate-50 max-w-lg mx-auto">
+            <CertificateScreen courseId={currentScreen.courseId} onBack={popScreen} />
+          </div>
+        );
+      case 'verify-certificate':
+        return (
+          <div className="min-h-screen bg-slate-50 max-w-lg mx-auto">
+            <VerifyCertificateScreen code={currentScreen.code} onBack={popScreen} />
           </div>
         );
       case 'course-editor':

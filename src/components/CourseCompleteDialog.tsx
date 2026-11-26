@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { Trophy, Share2 } from 'lucide-react';
+import { Trophy, Share2, Award } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { useBackButton } from '@/hooks/useBackButton';
 import { buildCourseDeepLink } from '@/lib/deepLink';
@@ -50,12 +50,15 @@ export function CourseCompleteDialog({
   lessonCount,
   onClose,
   onBackToCourse,
+  onGetCertificate,
 }: {
   courseId: string;
   courseTitle: string;
   lessonCount: number;
   onClose: () => void;
   onBackToCourse: () => void;
+  /** Shown as the main action when given. */
+  onGetCertificate?: () => void;
 }) {
   const { t } = useI18n();
   useBackButton(onClose);
@@ -86,9 +89,18 @@ export function CourseCompleteDialog({
         </p>
         <p className="mt-1 text-xs text-slate-400">{t('complete.lessons', { n: lessonCount })}</p>
 
+        {onGetCertificate && (
+          <button
+            onClick={onGetCertificate}
+            className="mt-6 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-500 text-white text-sm font-semibold active:scale-[0.98] transition-all"
+          >
+            <Award className="h-4 w-4" />
+            {t('complete.getCertificate')}
+          </button>
+        )}
         <button
           onClick={share}
-          className="mt-6 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-500 text-white text-sm font-semibold active:scale-[0.98] transition-all"
+          className={`${onGetCertificate ? 'mt-2' : 'mt-6'} w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-500 text-white text-sm font-semibold active:scale-[0.98] transition-all`}
         >
           <Share2 className="h-4 w-4" />
           {t('complete.share')}

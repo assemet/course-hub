@@ -108,3 +108,13 @@ export async function signJwt(
   const signature = base64Url(await hmacSha256(enc.encode(secret), `${header}.${payload}`));
   return { token: `${header}.${payload}.${signature}`, expiresAt: exp };
 }
+
+// The bot's @username (for t.me links). Cached for the function instance's life.
+let cachedBotUsername: string | null = null;
+export async function getBotUsername(botToken: string): Promise<string | null> {
+  if (cachedBotUsername) return cachedBotUsername;
+  const res = await fetch(`https://api.telegram.org/bot${botToken}/getMe`).catch(() => null);
+  const data = await res?.json().catch(() => null);
+  cachedBotUsername = typeof data?.result?.username === "string" ? data.result.username : null;
+  return cachedBotUsername;
+}

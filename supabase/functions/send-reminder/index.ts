@@ -5,7 +5,7 @@
 // must be enrolled in it. The target chat id and course title come from the
 // database, never from the request.
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
-import { corsHeaders, json, verifyInitData } from "../_shared/telegram.ts";
+import { corsHeaders, getBotUsername, json, verifyInitData } from "../_shared/telegram.ts";
 
 const MIN_HOURS_BETWEEN_REMINDERS = 24;
 
@@ -34,15 +34,6 @@ function reminderText(lang: Lang, title: string, done: number, total: number, cu
 
 const buttonLabel: Record<Lang, string> = { ar: "▶️ متابعة الدورة", en: "▶️ Continue the course" };
 
-// The bot's username, for the "continue" link. Cached for the instance's life.
-let botUsername: string | null = null;
-async function getBotUsername(botToken: string): Promise<string | null> {
-  if (botUsername) return botUsername;
-  const res = await fetch(`https://api.telegram.org/bot${botToken}/getMe`).catch(() => null);
-  const data = await res?.json().catch(() => null);
-  botUsername = typeof data?.result?.username === "string" ? data.result.username : null;
-  return botUsername;
-}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });

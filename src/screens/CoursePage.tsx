@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ChevronDown, Check, BookOpen, FileText, Link as LinkIcon, Share2, Copy, Check as CheckIcon, Play, Trophy } from 'lucide-react';
+import { ChevronDown, Check, BookOpen, FileText, Link as LinkIcon, Share2, Copy, Check as CheckIcon, Play, Trophy, Lock, ClipboardList, Award } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { ProgressBar } from '@/components/ProgressBar';
 import { LoadingScreen } from '@/components/Spinner';
@@ -19,10 +19,11 @@ import {
   getAllLessonsOrdered,
   pickNextLesson,
 } from '@/lib/courseService';
-import type { Course, ModuleWithLessons, LessonProgress, Enrollment } from '@/lib/types';
+import type { Course, ModuleWithLessons, LessonProgress, Enrollment, Lesson } from '@/lib/types';
 import { buildCourseDeepLink } from '@/lib/deepLink';
 import { useI18n, type TKey } from '@/lib/i18n';
 import { MediaThumb } from '@/components/MediaThumb';
+import { fetchCourseQuizStatus, hasQuiz, lockedModuleIds, type QuizStatus } from '@/lib/quizService';
 import { formatDuration } from '@/lib/mediaService';
 import type { LessonMediaType } from '@/lib/types';
 
@@ -39,10 +40,14 @@ export function CoursePage({
   courseId,
   onBack,
   onOpenLesson,
+  onOpenQuiz,
+  onOpenCertificate,
 }: {
   courseId: string;
   onBack: () => void;
   onOpenLesson: (courseId: string, lessonId: string) => void;
+  onOpenQuiz: (courseId: string, moduleId: string) => void;
+  onOpenCertificate: (courseId: string) => void;
 }) {
   const { user } = useUser();
   const { t } = useI18n();
@@ -55,6 +60,7 @@ export function CoursePage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [quizStatus, setQuizStatus] = useState<Map<string, QuizStatus>>(new Map());
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -70,11 +76,14 @@ export function CoursePage({
       }
       setCourse(c);
 
-      const [mods, lp, existingEnrollment] = await Promise.all([
+      const [mods, lp, existingEnrollment, quizzes] = await Promise.all([
         fetchModulesWithLessons(courseId),
         fetchLessonProgress(user.id, courseId),
         fetchEnrollment(user.id, courseId),
+        // Optional: the course still works if quizzes can't be loaded.
+        fetchCourseQuizStatus(courseId).catch(() => new Map<string, QuizStatus>()),
       ]);
+      setQuizStatus(quizzes);
 
       // Creators previewing their own course shouldn't count as students.
       const activeEnrollment =
@@ -160,6 +169,34 @@ export function CoursePage({
 
   const lastLessonId = enrollment?.last_lesson_id ?? null;
 
+  const allLessonsOrdered = getAllLessonsOrdered(modules);
+  const locked = lockedModuleIds(modules, quizStatus, course.quiz_gating);
+  // First module whose quiz is not passed yet (only quizzes with questions count).
+  const pendingQuizModule = modules.find((m) => {
+    const st = quizStatus.get(m.id);
+    return hasQuiz(st) && !st.passed;
+  }) ?? null;
+  const allLessonsDone = progress.total_lessons > 0 && progress.completed_lessons >= progress.total_lessons;
+
+  type NextStep =
+    | { kind: 'lesson'; lesson: Lesson; start: boolean }
+    | { kind: 'quiz'; module: ModuleWithLessons }
+    | { kind: 'finished' };
+  const nextStep: NextStep | null = (() => {
+    if (progress.total_lessons === 0) return null;
+    if (allLessonsDone) {
+      return pendingQuizModule ? { kind: 'quiz', module: pendingQuizModule } : { kind: 'finished' };
+    }
+    const next = pickNextLesson(modules, completedSet, lastLessonId);
+    if (!next) return null;
+    const nextModule = modules.find((m) => m.lessons.some((l) => l.id === next.id));
+    // The next lesson is behind a quiz: take that quiz first.
+    if (nextModule && locked.has(nextModule.id) && pendingQuizModule) {
+      return { kind: 'quiz', module: pendingQuizModule };
+    }
+    return { kind: 'lesson', lesson: next, start: progress.completed_lessons === 0 && !lastLessonId };
+  })();
+
   return (
     <div className="min-h-screen bg-slate-50">
       <AppHeader
@@ -214,45 +251,58 @@ export function CoursePage({
             <ProgressBar percent={progress.progress_percent} />
           </div>
 
-          {/* The one obvious next step: start, continue, or celebrate. */}
-          {progress.total_lessons > 0 && (() => {
-            const allLessons = getAllLessonsOrdered(modules);
-            const finished = progress.completed_lessons >= progress.total_lessons;
-            if (finished) {
-              return (
-                <div className="mt-4 rounded-xl bg-green-50 border border-green-200 p-3 flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-                    <Trophy className="h-5 w-5 text-white" />
-                  </div>
-                  <p className="flex-1 text-sm font-semibold text-green-700">{t('course.finished')}</p>
-                  <button
-                    onClick={() => handleLessonClick(allLessons[0].id)}
-                    className="text-xs font-semibold text-green-700 underline-offset-2 hover:underline flex-shrink-0"
-                  >
-                    {t('course.reviewFromStart')}
-                  </button>
+          {/* The one obvious next step: a lesson, a quiz, or the certificate. */}
+          {nextStep?.kind === 'finished' && (
+            <div className="mt-4 rounded-xl bg-green-50 border border-green-200 p-3">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                  <Trophy className="h-5 w-5 text-white" />
                 </div>
-              );
-            }
-            const next = pickNextLesson(modules, completedSet, lastLessonId);
-            if (!next) return null;
-            const notStarted = progress.completed_lessons === 0 && !lastLessonId;
-            return (
+                <p className="flex-1 text-sm font-semibold text-green-700">{t('course.finished')}</p>
+              </div>
+              {enrollment && (
+                <button
+                  onClick={() => onOpenCertificate(courseId)}
+                  className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-500 text-white text-sm font-semibold active:scale-[0.98] transition-all"
+                >
+                  <Award className="h-4 w-4" />
+                  {t('course.certificate')}
+                </button>
+              )}
               <button
-                onClick={() => handleLessonClick(next.id)}
-                className="mt-4 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-[0.98] shadow-sm transition-all min-w-0"
+                onClick={() => handleLessonClick(allLessonsOrdered[0].id)}
+                className="mt-2 w-full text-xs font-semibold text-green-700 underline-offset-2 hover:underline"
               >
-                <Play className="h-4 w-4 fill-white flex-shrink-0" />
-                {notStarted ? (
-                  t('course.start')
-                ) : (
-                  <span className="truncate">
-                    {t('course.continue')} <bdi>{next.title}</bdi>
-                  </span>
-                )}
+                {t('course.reviewFromStart')}
               </button>
-            );
-          })()}
+            </div>
+          )}
+          {nextStep?.kind === 'quiz' && (
+            <button
+              onClick={() => onOpenQuiz(courseId, nextStep.module.id)}
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-500 text-white text-sm font-semibold active:scale-[0.98] shadow-sm transition-all min-w-0"
+            >
+              <ClipboardList className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate">
+                {t('course.takeQuiz')} <bdi>{nextStep.module.title}</bdi>
+              </span>
+            </button>
+          )}
+          {nextStep?.kind === 'lesson' && (
+            <button
+              onClick={() => handleLessonClick(nextStep.lesson.id)}
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-[0.98] shadow-sm transition-all min-w-0"
+            >
+              <Play className="h-4 w-4 fill-white flex-shrink-0" />
+              {nextStep.start ? (
+                t('course.start')
+              ) : (
+                <span className="truncate">
+                  {t('course.continue')} <bdi>{nextStep.lesson.title}</bdi>
+                </span>
+              )}
+            </button>
+          )}
         </Card>
 
         {/* Modules */}
@@ -261,6 +311,8 @@ export function CoursePage({
             const expanded = expandedModules.has(module.id);
             const moduleCompleted = module.lessons.filter((l) => completedSet.has(l.id)).length;
             const moduleTotal = module.lessons.length;
+            const isLocked = locked.has(module.id);
+            const quiz = quizStatus.get(module.id);
 
             return (
               <Card key={module.id} className="overflow-hidden">
@@ -268,13 +320,17 @@ export function CoursePage({
                   onClick={() => toggleModule(module.id)}
                   className="w-full flex items-center gap-3 p-4 text-start"
                 >
-                  <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-                    <span className="text-sm font-bold text-blue-500">{index + 1}</span>
+                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${isLocked ? 'bg-slate-100' : 'bg-blue-50'}`}>
+                    {isLocked ? (
+                      <Lock className="h-4 w-4 text-slate-400" />
+                    ) : (
+                      <span className="text-sm font-bold text-blue-500">{index + 1}</span>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 dir="auto" className="font-semibold text-slate-900 truncate text-left rtl:text-right">{module.title}</h3>
+                    <h3 dir="auto" className={`font-semibold truncate text-left rtl:text-right ${isLocked ? 'text-slate-500' : 'text-slate-900'}`}>{module.title}</h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {t('course.moduleProgress', { done: moduleCompleted, total: moduleTotal })}
+                      {isLocked ? t('course.moduleLocked') : t('course.moduleProgress', { done: moduleCompleted, total: moduleTotal })}
                     </p>
                   </div>
                   <ChevronDown
@@ -296,10 +352,15 @@ export function CoursePage({
                             <button
                               key={lesson.id}
                               onClick={() => handleLessonClick(lesson.id)}
-                              className="w-full flex items-center gap-3 px-4 py-3 text-start hover:bg-slate-50 active:bg-slate-100 transition-colors"
+                              disabled={isLocked}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-start enabled:hover:bg-slate-50 enabled:active:bg-slate-100 disabled:opacity-50 transition-colors"
                             >
                               <div className="flex-shrink-0">
-                                {state === 'completed' ? (
+                                {isLocked ? (
+                                  <div className="h-7 w-7 rounded-full bg-slate-100 flex items-center justify-center">
+                                    <Lock className="h-3.5 w-3.5 text-slate-400" />
+                                  </div>
+                                ) : state === 'completed' ? (
                                   <div className="h-7 w-7 rounded-full bg-green-500 flex items-center justify-center">
                                     <Check className="h-4 w-4 text-white" strokeWidth={3} />
                                   </div>
@@ -352,6 +413,34 @@ export function CoursePage({
                           );
                         })}
                       </div>
+                    )}
+
+                    {/* Module quiz */}
+                    {hasQuiz(quiz) && (
+                      <button
+                        onClick={() => onOpenQuiz(courseId, module.id)}
+                        disabled={isLocked}
+                        className="w-full flex items-center gap-3 px-4 py-3 border-t border-slate-100 text-start bg-purple-50/40 enabled:hover:bg-purple-50 disabled:opacity-50 transition-colors"
+                      >
+                        <div className={`h-7 w-7 rounded-full flex items-center justify-center flex-shrink-0 ${quiz.passed ? 'bg-green-500' : 'bg-purple-100'}`}>
+                          {quiz.passed ? (
+                            <Check className="h-4 w-4 text-white" strokeWidth={3} />
+                          ) : (
+                            <ClipboardList className="h-3.5 w-3.5 text-purple-600" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-purple-700">{t('quiz.title')}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {quiz.passed
+                              ? t('course.quizPassed', { score: quiz.best_score ?? 0, total: quiz.best_total ?? 0 })
+                              : quiz.attempts > 0
+                                ? t('course.quizRetry', { score: quiz.best_score ?? 0, total: quiz.best_total ?? 0 })
+                                : t('course.quizInfo', { n: quiz.question_count, pass: quiz.pass_percent })}
+                          </p>
+                        </div>
+                        <ChevronDown className="h-4 w-4 text-slate-300 -rotate-90 rtl:rotate-90" />
+                      </button>
                     )}
                   </div>
                 )}

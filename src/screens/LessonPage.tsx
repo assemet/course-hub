@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Check, ChevronLeft, ChevronRight, FileText as FileIcon, Link as LinkIcon, Download, Send, CheckCircle2, ExternalLink, ListOrdered } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, FileText as FileIcon, Link as LinkIcon, Download, Send, CheckCircle2, ExternalLink, ListOrdered, ClipboardList, Lock } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { LoadingScreen } from '@/components/Spinner';
 import { ErrorState } from '@/components/StateViews';
@@ -8,6 +8,7 @@ import { LessonMedia } from '@/components/LessonMedia';
 import { LinkifiedText } from '@/components/LinkifiedText';
 import { LessonListSheet } from '@/components/LessonListSheet';
 import { CourseCompleteDialog } from '@/components/CourseCompleteDialog';
+import { fetchCourseQuizStatus, hasQuiz, lockedModuleIds, type QuizStatus } from '@/lib/quizService';
 import { useUser } from '@/hooks/useUser';
 import {
   fetchCourseById,
@@ -42,10 +43,14 @@ export function LessonPage({
   lessonId,
   onBack,
   onNavigateLesson,
+  onOpenQuiz,
+  onOpenCertificate,
 }: {
   courseId: string;
   onBack: () => void;
   onNavigateLesson: (courseId: string, lessonId: string) => void;
+  onOpenQuiz: (courseId: string, moduleId: string) => void;
+  onOpenCertificate: (courseId: string) => void;
   lessonId: string;
 }) {
   const { user } = useUser();
@@ -63,6 +68,7 @@ export function LessonPage({
   const [completedSet, setCompletedSet] = useState<Set<string>>(new Set());
   const [showList, setShowList] = useState(false);
   const [showCourseComplete, setShowCourseComplete] = useState(false);
+  const [quizStatus, setQuizStatus] = useState<Map<string, QuizStatus>>(new Map());
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -78,11 +84,13 @@ export function LessonPage({
       }
       setCourse(c);
 
-      const [mods, lp, res] = await Promise.all([
+      const [mods, lp, res, quizzes] = await Promise.all([
         fetchModulesWithLessons(courseId),
         fetchLessonProgress(user.id, courseId),
         fetchResourcesByLesson(lessonId),
+        fetchCourseQuizStatus(courseId).catch(() => new Map<string, QuizStatus>()),
       ]);
+      setQuizStatus(quizzes);
 
       setModules(mods);
       setResources(res);
@@ -117,6 +125,18 @@ export function LessonPage({
   const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null;
   const nextLesson = currentIndex >= 0 && currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null;
   const currentModule = modules.find((m) => m.lessons.some((l) => l.id === lessonId)) ?? null;
+  const locked = lockedModuleIds(modules, quizStatus, !!course?.quiz_gating);
+  const isLocked = !!currentModule && locked.has(currentModule.id);
+  // The quiz that stands between the learner and what comes next, if any.
+  const currentQuiz = currentModule ? quizStatus.get(currentModule.id) : undefined;
+  const isLastInModule = !!currentModule && currentModule.lessons[currentModule.lessons.length - 1]?.id === lessonId;
+  const quizIsNext = !!currentModule && isLastInModule && hasQuiz(currentQuiz) && !currentQuiz.passed;
+  const allQuizzesPassed = [...quizStatus.values()].every((s) => !hasQuiz(s) || s.passed);
+  // First module (in order) whose quiz is still open: the blocker when gating is on.
+  const blockingQuizModule = modules.find((m) => {
+    const st = quizStatus.get(m.id);
+    return hasQuiz(st) && !st.passed;
+  }) ?? null;
 
   const handleMarkComplete = async () => {
     if (!user || completed || marking) return;
@@ -128,8 +148,8 @@ export function LessonPage({
       const done = new Set(completedSet).add(lessonId);
       setCompletedSet(done);
       hapticFeedback('success');
-      // This was the last unfinished lesson: celebrate the whole course.
-      if (allLessons.length > 0 && allLessons.every((l) => done.has(l.id))) {
+      // This was the last unfinished lesson and every quiz is passed: celebrate the course.
+      if (allLessons.length > 0 && allLessons.every((l) => done.has(l.id)) && allQuizzesPassed) {
         setShowCourseComplete(true);
       } else {
         setShowSuccess(true);
@@ -170,6 +190,51 @@ export function LessonPage({
   );
 
   if (!currentLesson) return null;
+
+  // Gated module: say why it's closed and lead to the quiz that opens it.
+  if (isLocked) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <AppHeader title={course?.title ?? t('lesson.title')} onBack={onBack} />
+        <div className="px-6 py-16 text-center">
+          <div className="mx-auto h-16 w-16 rounded-2xl bg-slate-100 flex items-center justify-center">
+            <Lock className="h-8 w-8 text-slate-400" />
+          </div>
+          <h1 className="mt-4 text-lg font-bold text-slate-900">{t('lesson.lockedTitle')}</h1>
+          <p className="mt-2 text-sm text-slate-500">{t('lesson.lockedBody')}</p>
+          {blockingQuizModule && (
+            <button
+              onClick={() => onOpenQuiz(courseId, blockingQuizModule.id)}
+              className="mt-6 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-500 text-white text-sm font-semibold active:scale-[0.98] transition-all min-w-0"
+            >
+              <ClipboardList className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate">{t('course.takeQuiz')} <bdi>{blockingQuizModule.title}</bdi></span>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  type NextAction =
+    | { kind: 'lesson'; lesson: Lesson }
+    | { kind: 'quiz'; moduleId: string }
+    | { kind: 'certificate' };
+  const nextAction: NextAction | null = (() => {
+    if (!completed) return null;
+    if (quizIsNext && currentModule) return { kind: 'quiz', moduleId: currentModule.id };
+    if (nextLesson) {
+      const nextModule = modules.find((m) => m.lessons.some((l) => l.id === nextLesson.id));
+      if (nextModule && locked.has(nextModule.id) && blockingQuizModule) {
+        return { kind: 'quiz', moduleId: blockingQuizModule.id };
+      }
+      return { kind: 'lesson', lesson: nextLesson };
+    }
+    const allDone = allLessons.length > 0 && allLessons.every((l) => completedSet.has(l.id));
+    if (allDone && blockingQuizModule) return { kind: 'quiz', moduleId: blockingQuizModule.id };
+    if (allDone) return { kind: 'certificate' };
+    return null;
+  })();
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -325,22 +390,41 @@ export function LessonPage({
               {nextLesson ? t('lesson.completedNext') : t('lesson.completedDone')}
             </div>
           )}
-          {completed && nextLesson ? (
-            // Done here: the natural next step is the next lesson.
+          {nextAction ? (
+            // Done here: offer the natural next step.
             <div className="flex items-center gap-2">
               <span className="flex items-center gap-1 px-3 py-3.5 rounded-xl bg-green-50 text-green-600 border border-green-200 text-sm font-semibold flex-shrink-0">
                 <Check className="h-4 w-4" strokeWidth={3} />
                 {t('lesson.completed')}
               </span>
-              <button
-                onClick={() => handleNavigate(nextLesson.id)}
-                className="flex-1 min-w-0 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-[0.98] shadow-sm transition-all"
-              >
-                <span className="truncate">
-                  {t('lesson.nextPrefix')} <bdi>{nextLesson.title}</bdi>
-                </span>
-                <ChevronRight className="h-4 w-4 flex-shrink-0 rtl:rotate-180" />
-              </button>
+              {nextAction.kind === 'lesson' && (
+                <button
+                  onClick={() => handleNavigate(nextAction.lesson.id)}
+                  className="flex-1 min-w-0 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-[0.98] shadow-sm transition-all"
+                >
+                  <span className="truncate">
+                    {t('lesson.nextPrefix')} <bdi>{nextAction.lesson.title}</bdi>
+                  </span>
+                  <ChevronRight className="h-4 w-4 flex-shrink-0 rtl:rotate-180" />
+                </button>
+              )}
+              {nextAction.kind === 'quiz' && (
+                <button
+                  onClick={() => onOpenQuiz(courseId, nextAction.moduleId)}
+                  className="flex-1 min-w-0 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-500 text-white text-sm font-semibold active:scale-[0.98] shadow-sm transition-all"
+                >
+                  <ClipboardList className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">{t('quiz.takeModuleQuiz')}</span>
+                </button>
+              )}
+              {nextAction.kind === 'certificate' && (
+                <button
+                  onClick={() => onOpenCertificate(courseId)}
+                  className="flex-1 min-w-0 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-amber-500 text-white text-sm font-semibold active:scale-[0.98] shadow-sm transition-all"
+                >
+                  <span className="truncate">{t('complete.getCertificate')}</span>
+                </button>
+              )}
             </div>
           ) : (
           <button
@@ -378,6 +462,7 @@ export function LessonPage({
           modules={modules}
           completedSet={completedSet}
           currentLessonId={lessonId}
+          lockedModuleIds={locked}
           onClose={() => setShowList(false)}
           onSelect={(id) => {
             setShowList(false);
@@ -395,6 +480,10 @@ export function LessonPage({
           onBackToCourse={() => {
             setShowCourseComplete(false);
             onBack();
+          }}
+          onGetCertificate={() => {
+            setShowCourseComplete(false);
+            onOpenCertificate(courseId);
           }}
         />
       )}

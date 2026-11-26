@@ -16,3 +16,7 @@ verify_jwt = false
 # the gateway only needs to accept the project's anon key.
 [functions.lesson-media]
 verify_jwt = true
+
+# Verifies Telegram initData itself and checks certificate ownership.
+[functions.certificate-send]
+verify_jwt = true
