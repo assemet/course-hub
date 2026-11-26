@@ -123,6 +123,30 @@ code is what proves a certificate.
 Deploy: `supabase functions deploy certificate-send` (and redeploy
 `send-reminder`, which now shares `getBotUsername`).
 
+## Flashcards
+
+**Creators** (Course editor → Modules → *Flashcards*): cards per module, each a
+front (question/term, up to 500 characters) and back (answer, up to 1000).
+*Paste a list* adds many at once: one card per line as `front | back`; a tab
+(two columns copied from a spreadsheet), ` = ` or ` : ` also work. Lines that
+can't be read are listed and skipped.
+
+**Students** review with spaced repetition (Leitner boxes 1-5). From the course
+page: *Review flashcards* (whole course, due cards only) or a module's
+*Flashcards* row. A session holds up to 20 cards: due reviews first, then new
+cards in course order. *I knew it* moves a card up a box (next review in 2, 4,
+8, 16 days); *I didn't know* sends it back to box 1 and shows it again at the
+end of the session. When nothing is due, students can practise all cards
+anyway. Modules locked by quiz gating are left out.
+
+- `review_flashcard()` checks the student is enrolled in a published course
+  (or owns it) and does the scheduling in the database; students can only read
+  their own `flashcard_reviews` and can't write them directly.
+- `course_flashcard_stats()` gives totals, due and learned (box 4+) per module.
+
+Deploy: run `supabase/migrations/20261127100000_010_flashcards.sql`. No new
+edge functions.
+
 ## Creator tools
 
 - **Students and progress** (Dashboard → a course → *Students and progress*):

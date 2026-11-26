@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Plus, ChevronDown, ChevronUp, Trash2, Edit2,
   Save, X, Globe, GlobeLock, FileText, Link as LinkIcon, Download, Send,
-  BookOpen, ShieldCheck, ShieldOff, ClipboardList, Lock, LockOpen,
+  BookOpen, ShieldCheck, ShieldOff, ClipboardList, Lock, LockOpen, Layers,
 } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { LoadingScreen } from '@/components/Spinner';
@@ -19,6 +19,8 @@ import { hapticFeedback, sanitizeUrl } from '@/lib/telegram';
 import { useI18n, type TKey } from '@/lib/i18n';
 import { useBackButton } from '@/hooks/useBackButton';
 import { QuizEditor } from '@/components/QuizEditor';
+import { FlashcardEditor } from '@/components/FlashcardEditor';
+import { fetchFlashcardStats, type ModuleFlashcardStats } from '@/lib/flashcardService';
 import { fetchCourseQuizStatus, type QuizStatus } from '@/lib/quizService';
 import { errorMessage } from '@/lib/errors';
 import type { Course, ModuleWithLessons, Lesson, Resource, ResourceType } from '@/lib/types';
@@ -56,6 +58,8 @@ export function CourseEditor({
   const [editingLesson, setEditingLesson] = useState<{ moduleId: string; lesson: Lesson | null } | null>(null);
   const [editingQuiz, setEditingQuiz] = useState<{ moduleId: string; title: string } | null>(null);
   const [quizStatus, setQuizStatus] = useState<Map<string, QuizStatus>>(new Map());
+  const [editingCards, setEditingCards] = useState<{ moduleId: string; title: string } | null>(null);
+  const [cardStats, setCardStats] = useState<Map<string, ModuleFlashcardStats>>(new Map());
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
@@ -88,13 +92,15 @@ export function CourseEditor({
       setCoverUrl(c.cover_url ?? '');
       setSlug(c.slug ?? '');
 
-      const [mods, quizzes] = await Promise.all([
+      const [mods, quizzes, cards] = await Promise.all([
         fetchModulesWithLessons(courseId),
-        // Optional: the editor still works if quizzes can't be loaded.
+        // Optional: the editor still works if quizzes/cards can't be loaded.
         fetchCourseQuizStatus(courseId).catch(() => new Map<string, QuizStatus>()),
+        fetchFlashcardStats(courseId).catch(() => new Map<string, ModuleFlashcardStats>()),
       ]);
       setModules(mods);
       setQuizStatus(quizzes);
+      setCardStats(cards);
       if (mods.length > 0) {
         setExpandedModules(new Set([mods[0].id]));
       }
@@ -202,6 +208,15 @@ export function CourseEditor({
       hapticFeedback('success');
     } catch (err) {
       setActionError(errorMessage(err, t('editor.gatingFailed')));
+    }
+  };
+
+  const refreshCardStats = async () => {
+    if (!course) return;
+    try {
+      setCardStats(await fetchFlashcardStats(course.id));
+    } catch {
+      // keep the previous counts
     }
   };
 
@@ -844,6 +859,18 @@ export function CourseEditor({
                                 : t('editor.noQuiz')}
                             </span>
                           </button>
+                          <button
+                            onClick={() => setEditingCards({ moduleId: module.id, title: module.title })}
+                            className="w-full flex items-center gap-2 py-2 px-2 rounded-lg text-teal-600 text-sm font-medium hover:bg-teal-50 transition-colors"
+                          >
+                            <Layers className="h-4 w-4" />
+                            <span className="flex-1 text-start">{t('editor.flashcards')}</span>
+                            <span className="text-xs font-normal text-slate-400">
+                              {(cardStats.get(module.id)?.total ?? 0) > 0
+                                ? t('cardEditor.count', { n: cardStats.get(module.id)!.total })
+                                : t('editor.noQuiz')}
+                            </span>
+                          </button>
                         </div>
                       )}
                     </Card>
@@ -854,6 +881,17 @@ export function CourseEditor({
           </div>
         )}
       </div>
+
+      {editingCards && (
+        <FlashcardEditor
+          moduleId={editingCards.moduleId}
+          moduleTitle={editingCards.title}
+          onClose={() => {
+            setEditingCards(null);
+            refreshCardStats();
+          }}
+        />
+      )}
 
       {editingQuiz && (
         <QuizEditor

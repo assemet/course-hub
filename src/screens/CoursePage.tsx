@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ChevronDown, Check, BookOpen, FileText, Link as LinkIcon, Share2, Copy, Check as CheckIcon, Play, Trophy, Lock, ClipboardList, Award } from 'lucide-react';
+import { ChevronDown, Check, BookOpen, FileText, Link as LinkIcon, Share2, Copy, Check as CheckIcon, Play, Trophy, Lock, ClipboardList, Award, Layers } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { ProgressBar } from '@/components/ProgressBar';
 import { LoadingScreen } from '@/components/Spinner';
@@ -24,6 +24,7 @@ import { buildCourseDeepLink } from '@/lib/deepLink';
 import { useI18n, type TKey } from '@/lib/i18n';
 import { MediaThumb } from '@/components/MediaThumb';
 import { fetchCourseQuizStatus, hasQuiz, lockedModuleIds, type QuizStatus } from '@/lib/quizService';
+import { fetchFlashcardStats, type ModuleFlashcardStats } from '@/lib/flashcardService';
 import { formatDuration } from '@/lib/mediaService';
 import type { LessonMediaType } from '@/lib/types';
 
@@ -42,12 +43,15 @@ export function CoursePage({
   onOpenLesson,
   onOpenQuiz,
   onOpenCertificate,
+  onOpenFlashcards,
 }: {
   courseId: string;
   onBack: () => void;
   onOpenLesson: (courseId: string, lessonId: string) => void;
   onOpenQuiz: (courseId: string, moduleId: string) => void;
   onOpenCertificate: (courseId: string) => void;
+  /** moduleId null = review every unlocked module */
+  onOpenFlashcards: (courseId: string, moduleId: string | null) => void;
 }) {
   const { user } = useUser();
   const { t } = useI18n();
@@ -61,6 +65,7 @@ export function CoursePage({
   const [error, setError] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [quizStatus, setQuizStatus] = useState<Map<string, QuizStatus>>(new Map());
+  const [cardStats, setCardStats] = useState<Map<string, ModuleFlashcardStats>>(new Map());
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -76,14 +81,16 @@ export function CoursePage({
       }
       setCourse(c);
 
-      const [mods, lp, existingEnrollment, quizzes] = await Promise.all([
+      const [mods, lp, existingEnrollment, quizzes, cards] = await Promise.all([
         fetchModulesWithLessons(courseId),
         fetchLessonProgress(user.id, courseId),
         fetchEnrollment(user.id, courseId),
         // Optional: the course still works if quizzes can't be loaded.
         fetchCourseQuizStatus(courseId).catch(() => new Map<string, QuizStatus>()),
+        fetchFlashcardStats(courseId).catch(() => new Map<string, ModuleFlashcardStats>()),
       ]);
       setQuizStatus(quizzes);
+      setCardStats(cards);
 
       // Creators previewing their own course shouldn't count as students.
       const activeEnrollment =
@@ -288,6 +295,22 @@ export function CoursePage({
               </span>
             </button>
           )}
+          {/* Flashcards across the course (only unlocked modules count). */}
+          {(() => {
+            const open = [...cardStats.values()].filter((s) => !locked.has(s.module_id));
+            const total = open.reduce((n, s) => n + s.total, 0);
+            const due = open.reduce((n, s) => n + s.due, 0);
+            if (total === 0) return null;
+            return (
+              <button
+                onClick={() => onOpenFlashcards(courseId, null)}
+                className="mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-teal-200 bg-teal-50 text-teal-700 text-sm font-semibold active:scale-[0.98] transition-all"
+              >
+                <Layers className="h-4 w-4" />
+                {due > 0 ? t('cards.reviewDue', { n: due }) : t('cards.reviewAll')}
+              </button>
+            );
+          })()}
           {nextStep?.kind === 'lesson' && (
             <button
               onClick={() => handleLessonClick(nextStep.lesson.id)}
@@ -413,6 +436,34 @@ export function CoursePage({
                           );
                         })}
                       </div>
+                    )}
+
+                    {/* Module flashcards */}
+                    {(cardStats.get(module.id)?.total ?? 0) > 0 && (
+                      <button
+                        onClick={() => onOpenFlashcards(courseId, module.id)}
+                        disabled={isLocked}
+                        className="w-full flex items-center gap-3 px-4 py-3 border-t border-slate-100 text-start bg-teal-50/40 enabled:hover:bg-teal-50 disabled:opacity-50 transition-colors"
+                      >
+                        <div className="h-7 w-7 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
+                          <Layers className="h-3.5 w-3.5 text-teal-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-teal-700">{t('cards.title')}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {t('cards.moduleInfo', {
+                              total: cardStats.get(module.id)!.total,
+                              due: cardStats.get(module.id)!.due,
+                              learned: cardStats.get(module.id)!.learned,
+                            })}
+                          </p>
+                        </div>
+                        {cardStats.get(module.id)!.due > 0 && !isLocked && (
+                          <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-teal-500 text-white text-[11px] font-bold flex items-center justify-center tabular-nums">
+                            {cardStats.get(module.id)!.due}
+                          </span>
+                        )}
+                      </button>
                     )}
 
                     {/* Module quiz */}

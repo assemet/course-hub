@@ -19,6 +19,7 @@ import { getDeepLinkTarget } from '@/lib/deepLink';
 import { QuizScreen } from '@/screens/QuizScreen';
 import { CertificateScreen } from '@/screens/CertificateScreen';
 import { VerifyCertificateScreen } from '@/screens/VerifyCertificateScreen';
+import { FlashcardScreen } from '@/screens/FlashcardScreen';
 
 type Screen =
   | { name: 'tab' }
@@ -30,6 +31,7 @@ type Screen =
   | { name: 'quiz'; courseId: string; moduleId: string }
   | { name: 'certificate'; courseId: string }
   | { name: 'verify-certificate'; code: string }
+  | { name: 'flashcards'; courseId: string; moduleId: string | null }
   | { name: 'course-editor'; courseId: string | null; isNew: boolean };
 
 function AppContent() {
@@ -89,6 +91,7 @@ function AppContent() {
               onOpenLesson={(courseId, lessonId) => pushScreen({ name: 'lesson', courseId, lessonId })}
               onOpenQuiz={(courseId, moduleId) => pushScreen({ name: 'quiz', courseId, moduleId })}
               onOpenCertificate={(courseId) => pushScreen({ name: 'certificate', courseId })}
+              onOpenFlashcards={(courseId, moduleId) => pushScreen({ name: 'flashcards', courseId, moduleId })}
             />
           </div>
         );
@@ -126,6 +129,12 @@ function AppContent() {
                 setScreenStack((s) => [...s.slice(0, -1), { name: 'certificate', courseId }]);
               }}
             />
+          </div>
+        );
+      case 'flashcards':
+        return (
+          <div className="min-h-screen bg-slate-50 max-w-lg mx-auto">
+            <FlashcardScreen courseId={currentScreen.courseId} moduleId={currentScreen.moduleId} onBack={popScreen} />
           </div>
         );
       case 'certificate':
