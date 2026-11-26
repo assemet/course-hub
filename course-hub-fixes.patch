@@ -1,0 +1,2034 @@
+From b6283f5b0452c240845c37e00fd5d86f8eaba5a6 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 15 Oct 2026 11:00:07 +0000
+Subject: [PATCH] Security hardening and bug fixes
+
+Security
+- Remove Telegram bot token from the client bundle (was VITE_TELEGRAM_BOT_TOKEN);
+  send-reminder now reads TELEGRAM_BOT_TOKEN from Edge Function secrets, verifies the
+  caller via initData, requires course ownership + enrollment, rate-limits per student.
+- Add auth-telegram Edge Function: verifies initData HMAC and issues a Supabase JWT.
+- Replace open USING (true) RLS policies with auth.uid()-scoped ones (migration 004);
+  anon has no table access, telegram_id is no longer readable by clients.
+- telegram-webhook: require X-Telegram-Bot-Api-Secret-Token, private chats only.
+- Validate URLs before opening links (block javascript:/data: schemes).
+
+Bug fixes
+- CourseEditor: action errors no longer replace the whole editor and discard input;
+  ownership check, slug/URL validation, duplicate-slug message, reorder error handling.
+- 'Continue learning' now resumes an unfinished lesson instead of skipping it.
+- Lesson 'in progress' state now shown; draft courses are no longer reachable by deep link.
+- Enrollment/progress writes are race-safe (conflict handling / upsert).
+- LessonPage: failed 'mark complete' keeps the lesson on screen.
+- Webhook: t.me links and native attachments (video/pdf/photo) are detected;
+  re-forwarding no longer resets imported messages to pending.
+- Deep links read start_param from the SDK first.
+- Parallelised N+1 queries on dashboard/home; removed dead code; lint is clean.
+
+Docs: .env.example, README with deploy steps.
+---
+ .env.example                                  |   6 +
+ README.md                                     |  60 ++++++
+ course_tracker_full_schema.sql                |   5 +
+ src/hooks/useUser.tsx                         |  32 +--
+ src/lib/auth.ts                               |  54 +----
+ src/lib/courseService.ts                      |  86 ++++----
+ src/lib/deepLink.ts                           |  11 +-
+ src/lib/notificationService.ts                |  69 +++---
+ src/lib/session.ts                            |  66 ++++++
+ src/lib/supabase.ts                           |   9 +-
+ src/lib/telegram.ts                           |  45 +++-
+ src/screens/CourseEditor.tsx                  | 130 ++++++-----
+ src/screens/CoursePage.tsx                    |  38 ++--
+ src/screens/CreatorDashboard.tsx              |  22 +-
+ src/screens/LessonPage.tsx                    |  12 +-
+ src/screens/Profile.tsx                       |   2 +-
+ src/screens/StudentHome.tsx                   |   3 +-
+ supabase/config.toml                          |   8 +
+ supabase/functions/_shared/telegram.ts        | 109 ++++++++++
+ supabase/functions/auth-telegram/index.ts     |  70 ++++++
+ supabase/functions/send-reminder/index.ts     | 130 ++++++-----
+ supabase/functions/telegram-webhook/index.ts  | 203 ++++++++++--------
+ .../20261015000000_004_lock_down_rls.sql      | 174 +++++++++++++++
+ 23 files changed, 962 insertions(+), 382 deletions(-)
+ create mode 100644 .env.example
+ create mode 100644 src/lib/session.ts
+ create mode 100644 supabase/functions/_shared/telegram.ts
+ create mode 100644 supabase/functions/auth-telegram/index.ts
+ create mode 100644 supabase/migrations/20261015000000_004_lock_down_rls.sql
+
+diff --git a/.env.example b/.env.example
+new file mode 100644
+index 0000000..82f9135
+--- /dev/null
++++ b/.env.example
+@@ -0,0 +1,6 @@
++# Public values, safe to ship to the browser.
++VITE_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
++VITE_SUPABASE_ANON_KEY=your-anon-key
++
++# NEVER add the Telegram bot token here: anything prefixed VITE_ is bundled into
++# the public JavaScript. Set it as an Edge Function secret instead (see README).
+diff --git a/README.md b/README.md
+index c45383d..1b140d0 100644
+--- a/README.md
++++ b/README.md
+@@ -1,3 +1,63 @@
+ # course-hub
+ 
+ [![Open in Bolt](https://bolt.new/static/open-in-bolt.svg)](https://bolt.new/~/sb1-txdfxcsl)
++
++Telegram Mini App for creating and following courses (React + Vite + Supabase).
++
++## Local setup
++
++```bash
++cp .env.example .env      # fill in VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
++npm install
++npm run dev
++npm run typecheck && npm run lint && npm run build
++```
++
++The app only works inside Telegram (it needs signed `initData`).
++
++## How authentication works
++
++1. The Mini App sends Telegram's signed `initData` to the `auth-telegram` Edge Function.
++2. The function verifies the HMAC with the bot token, upserts the user, and returns a
++   1-hour Supabase JWT whose `sub` is `users.id`.
++3. The client uses that JWT for every query, and Row Level Security scopes data with
++   `auth.uid()` (see `supabase/migrations/*_004_lock_down_rls.sql`).
++
++The anon key alone has **no** access to any table.
++
++## Deploying the backend
++
++Secrets (the CLI refuses names starting with `SUPABASE_`, hence `APP_JWT_SECRET`):
++
++```bash
++supabase secrets set \
++  TELEGRAM_BOT_TOKEN=<bot token from @BotFather> \
++  APP_JWT_SECRET=<Project Settings > API > JWT Secret> \
++  TELEGRAM_WEBHOOK_SECRET=<long random string>
++```
++
++Deploy in this order so the live app is never left without access:
++
++```bash
++supabase functions deploy auth-telegram
++supabase functions deploy send-reminder
++supabase functions deploy telegram-webhook
++# deploy the new frontend, THEN:
++supabase db push          # applies the RLS lockdown migration
++```
++
++Point the bot webhook at the function with the secret token:
++
++```bash
++curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
++  -d "url=https://<project>.supabase.co/functions/v1/telegram-webhook" \
++  -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
++```
++
++> If the bot token was ever deployed in a build that included `VITE_TELEGRAM_BOT_TOKEN`,
++> treat it as leaked: revoke it in @BotFather (`/revoke`) and set the new one as a secret.
++
++## Notes
++
++- `course_tracker_full_schema.sql` is an old all-in-one script with demo data and
++  permissive policies. Use the files in `supabase/migrations/` instead.
+diff --git a/course_tracker_full_schema.sql b/course_tracker_full_schema.sql
+index 1b5bf4f..c98c26e 100644
+--- a/course_tracker_full_schema.sql
++++ b/course_tracker_full_schema.sql
+@@ -1,3 +1,8 @@
++-- !!! DEPRECATED / DEMO ONLY !!!
++-- This script creates permissive `USING (true)` policies for the public anon key,
++-- which lets anyone read, modify and delete all data. Do NOT run it on a real
++-- project. Use supabase/migrations/ (including *_004_lock_down_rls.sql) instead.
++
+ -- ============================================================
+ -- Course Tracker — Complete Database Schema & Seed Data
+ -- ============================================================
+diff --git a/src/hooks/useUser.tsx b/src/hooks/useUser.tsx
+index c068177..d79cde2 100644
+--- a/src/hooks/useUser.tsx
++++ b/src/hooks/useUser.tsx
+@@ -1,7 +1,7 @@
+ import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+ import type { User } from '@/lib/types';
+-import { getCurrentTelegramUser, getOrCreateUser, switchRole } from '@/lib/auth';
+-import { initTelegramWebApp, isRunningInTelegram, getTelegramUser } from '@/lib/telegram';
++import { signInWithTelegram, switchRole } from '@/lib/auth';
++import { initTelegramWebApp, isRunningInTelegram, getTelegramInitData } from '@/lib/telegram';
+ 
+ interface UserContextValue {
+   user: User | null;
+@@ -21,24 +21,21 @@ const UserContext = createContext<UserContextValue>({
+   refreshUser: async () => {},
+ });
+ 
+-import type { TelegramUserData } from '@/lib/telegram';
+-
+-// On Telegram Web/Desktop, initDataUnsafe.user may not be populated
+-// immediately — poll for up to ~3 seconds after ready() is called.
++// On Telegram Web/Desktop, initData may not be populated immediately —
++// poll for up to ~3 seconds after ready() is called.
+ const POLL_INTERVAL_MS = 200;
+ const POLL_TIMEOUT_MS = 3000;
+ 
+-function waitForTelegramUser(): Promise<TelegramUserData | null> {
++function waitForInitData(): Promise<boolean> {
+   return new Promise((resolve) => {
+     const start = Date.now();
+     const check = () => {
+-      const user = getTelegramUser();
+-      if (user) {
+-        resolve(user);
++      if (getTelegramInitData()) {
++        resolve(true);
+         return;
+       }
+       if (Date.now() - start >= POLL_TIMEOUT_MS) {
+-        resolve(null);
++        resolve(false);
+         return;
+       }
+       setTimeout(check, POLL_INTERVAL_MS);
+@@ -65,15 +62,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
+     }
+ 
+     try {
+-      // We're inside Telegram but user data might not be populated yet.
++      // We're inside Telegram but initData might not be populated yet.
+       // Poll for it rather than immediately showing the fallback screen.
+-      const tgUser = await waitForTelegramUser();
+-      if (!tgUser) {
++      const hasInitData = await waitForInitData();
++      if (!hasInitData) {
+         setNotInTelegram(true);
+         setLoading(false);
+         return;
+       }
+-      const dbUser = await getOrCreateUser(tgUser);
++      // The signed initData is verified server-side; the client never decides identity.
++      const dbUser = await signInWithTelegram();
+       setUser(dbUser);
+       setNotInTelegram(false);
+     } catch (err) {
+@@ -91,12 +89,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
+     if (!user) return;
+     const newRole = user.role === 'student' ? 'creator' : 'student';
+     await switchRole(user.id, newRole);
+-    setUser({ ...user, role: newRole });
++    setUser((current) => (current ? { ...current, role: newRole } : current));
+   }, [user]);
+ 
+   const refreshUser = useCallback(async () => {
+     setLoading(true);
+     setError(null);
++    setNotInTelegram(false);
+     await loadUser();
+   }, [loadUser]);
+ 
+@@ -107,6 +106,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
+   );
+ }
+ 
++// eslint-disable-next-line react-refresh/only-export-components
+ export function useUser() {
+   return useContext(UserContext);
+ }
+diff --git a/src/lib/auth.ts b/src/lib/auth.ts
+index 0656344..38af42c 100644
+--- a/src/lib/auth.ts
++++ b/src/lib/auth.ts
+@@ -1,55 +1,11 @@
+ import { supabase } from './supabase';
++import { signIn } from './session';
+ import type { User } from './types';
+-import { getTelegramUser, type TelegramUserData } from './telegram';
+ 
+-export function getCurrentTelegramUser(): TelegramUserData | null {
+-  return getTelegramUser();
+-}
+-
+-export async function getOrCreateUser(telegramData: TelegramUserData): Promise<User> {
+-  const { data: existing } = await supabase
+-    .from('users')
+-    .select('*')
+-    .eq('telegram_id', telegramData.id)
+-    .maybeSingle();
+-
+-  if (existing) {
+-    const needsUpdate =
+-      existing.first_name !== (telegramData.first_name ?? 'Student') ||
+-      existing.username !== (telegramData.username ?? null) ||
+-      existing.photo_url !== (telegramData.photo_url ?? null);
+-
+-    if (needsUpdate) {
+-      const { data: updated, error } = await supabase
+-        .from('users')
+-        .update({
+-          first_name: telegramData.first_name ?? existing.first_name,
+-          username: telegramData.username ?? null,
+-          photo_url: telegramData.photo_url ?? null,
+-        })
+-        .eq('id', existing.id)
+-        .select()
+-        .single();
+-      if (error) throw error;
+-      return updated as User;
+-    }
+-    return existing as User;
+-  }
+-
+-  const { data: created, error } = await supabase
+-    .from('users')
+-    .insert({
+-      telegram_id: telegramData.id,
+-      username: telegramData.username ?? null,
+-      first_name: telegramData.first_name ?? 'Student',
+-      photo_url: telegramData.photo_url ?? null,
+-      role: 'student',
+-    })
+-    .select()
+-    .single();
+-
+-  if (error) throw error;
+-  return created as User;
++/** Signs in with Telegram (verified server-side) and returns the app user. */
++export async function signInWithTelegram(): Promise<User> {
++  const { user } = await signIn();
++  return user;
+ }
+ 
+ export async function switchRole(userId: string, role: 'student' | 'creator'): Promise<void> {
+diff --git a/src/lib/courseService.ts b/src/lib/courseService.ts
+index 0cf6a7c..a82a669 100644
+--- a/src/lib/courseService.ts
++++ b/src/lib/courseService.ts
+@@ -100,20 +100,20 @@ export async function fetchEnrollment(userId: string, courseId: string): Promise
+ }
+ 
+ export async function createEnrollment(userId: string, courseId: string): Promise<Enrollment> {
+-  const { data: existing } = await supabase
+-    .from('enrollments')
+-    .select('*')
+-    .eq('user_id', userId)
+-    .eq('course_id', courseId)
+-    .maybeSingle();
+-  if (existing) return existing as Enrollment;
+-
+   const { data, error } = await supabase
+     .from('enrollments')
+     .insert({ user_id: userId, course_id: courseId })
+     .select()
+     .single();
+-  if (error) throw error;
++
++  if (error) {
++    // 23505 = unique_violation: already enrolled (or a concurrent request won the race).
++    if (error.code === '23505') {
++      const existing = await fetchEnrollment(userId, courseId);
++      if (existing) return existing;
++    }
++    throw error;
++  }
+   return data as Enrollment;
+ }
+ 
+@@ -146,31 +146,17 @@ export async function markLessonComplete(
+   courseId: string,
+   lessonId: string
+ ): Promise<void> {
+-  const { data: existing } = await supabase
+-    .from('lesson_progress')
+-    .select('*')
+-    .eq('user_id', userId)
+-    .eq('lesson_id', lessonId)
+-    .maybeSingle();
+-
+-  if (existing) {
+-    const { error } = await supabase
+-      .from('lesson_progress')
+-      .update({ completed: true, completed_at: new Date().toISOString() })
+-      .eq('id', existing.id);
+-    if (error) throw error;
+-  } else {
+-    const { error } = await supabase
+-      .from('lesson_progress')
+-      .insert({
+-        user_id: userId,
+-        course_id: courseId,
+-        lesson_id: lessonId,
+-        completed: true,
+-        completed_at: new Date().toISOString(),
+-      });
+-    if (error) throw error;
+-  }
++  const { error } = await supabase.from('lesson_progress').upsert(
++    {
++      user_id: userId,
++      course_id: courseId,
++      lesson_id: lessonId,
++      completed: true,
++      completed_at: new Date().toISOString(),
++    },
++    { onConflict: 'user_id,lesson_id' }
++  );
++  if (error) throw error;
+ 
+   await updateLastLesson(userId, courseId, lessonId);
+ }
+@@ -204,12 +190,10 @@ export function getAllLessonsOrdered(modules: ModuleWithLessons[]): Lesson[] {
+ export function getLessonState(
+   lessonId: string,
+   completedSet: Set<string>,
+-  lastLessonId: string | null,
+-  allLessons: Lesson[]
++  lastLessonId: string | null
+ ): 'not_started' | 'in_progress' | 'completed' {
+   if (completedSet.has(lessonId)) return 'completed';
+   if (lastLessonId === lessonId) return 'in_progress';
+-  // If there's a last lesson and this lesson comes right after it, it's "next" = in progress concept
+   return 'not_started';
+ }
+ 
+@@ -223,12 +207,16 @@ export async function findNextLesson(
+ 
+   if (lastLessonId) {
+     const idx = allLessons.findIndex((l) => l.id === lastLessonId);
+-    if (idx >= 0 && idx + 1 < allLessons.length) {
+-      return allLessons[idx + 1];
++    if (idx >= 0) {
++      // Opened but not finished: resume it rather than skipping ahead.
++      if (!completedSet.has(lastLessonId)) return allLessons[idx];
++
++      // Finished: continue with the next unfinished lesson after it.
++      const following = allLessons.slice(idx + 1).find((l) => !completedSet.has(l.id));
++      if (following) return following;
+     }
+   }
+ 
+-  // Find first uncompleted lesson
+   const firstUncompleted = allLessons.find((l) => !completedSet.has(l.id));
+   if (firstUncompleted) return firstUncompleted;
+ 
+@@ -254,13 +242,19 @@ export async function fetchEnrolledCoursesWithProgress(userId: string): Promise<
+     .eq('status', 'published');
+   if (error) throw error;
+ 
+-  const result: Array<{ course: Course; progress: CourseProgress; enrollment: Enrollment }> = [];
+-  for (const enrollment of enrollments) {
++  const entries = enrollments.flatMap((enrollment) => {
+     const course = (courses as Course[]).find((c) => c.id === enrollment.course_id);
+-    if (!course) continue;
+-    const progress = await getCourseProgressForUser(userId, course.id);
+-    result.push({ course, progress, enrollment });
+-  }
++    return course ? [{ course, enrollment }] : [];
++  });
++
++  // Load every course's progress in parallel instead of one after another.
++  const result = await Promise.all(
++    entries.map(async ({ course, enrollment }) => ({
++      course,
++      enrollment,
++      progress: await getCourseProgressForUser(userId, course.id),
++    }))
++  );
+ 
+   // Sort by last activity descending
+   result.sort((a, b) =>
+diff --git a/src/lib/deepLink.ts b/src/lib/deepLink.ts
+index a52b04c..6ca1187 100644
+--- a/src/lib/deepLink.ts
++++ b/src/lib/deepLink.ts
+@@ -1,3 +1,5 @@
++import { getTelegramStartParam } from './telegram';
++
+ const BOT_USERNAME = 'course_tracker_bot';
+ 
+ export function buildCourseDeepLink(courseId: string): string {
+@@ -12,10 +14,11 @@ export function parseStartAppParam(startApp: string | null): { courseId: string
+ }
+ 
+ export function getDeepLinkCourseId(): string | null {
+-  const tg = window.Telegram?.WebApp;
+-  if (tg?.initDataUnsafe) {
+-    // startapp param is not directly accessible via SDK; check URL params
+-  }
++  // Preferred: the SDK exposes the `startapp` value as start_param.
++  const sdkParam = parseStartAppParam(getTelegramStartParam());
++  if (sdkParam) return sdkParam.courseId;
++
++  // Fallbacks for clients that only pass it through the launch URL.
+ 
+   const urlParams = new URLSearchParams(window.location.search);
+   const tgWebAppStartParam = urlParams.get('tgWebAppStartParam');
+diff --git a/src/lib/notificationService.ts b/src/lib/notificationService.ts
+index ec1d7eb..bed3c65 100644
+--- a/src/lib/notificationService.ts
++++ b/src/lib/notificationService.ts
+@@ -1,16 +1,17 @@
+ import { supabase } from './supabase';
++import { getTelegramInitData } from './telegram';
+ 
+-export async function fetchInactiveStudents(hours = 24): Promise<
+-  Array<{
+-    user_id: string;
+-    course_id: string;
+-    telegram_id: number;
+-    first_name: string;
+-    username: string | null;
+-    last_activity_at: string;
+-    course_title: string;
+-  }>
+-> {
++export interface InactiveStudent {
++  user_id: string;
++  course_id: string;
++  first_name: string;
++  username: string | null;
++  last_activity_at: string;
++  course_title: string;
++}
++
++/** Students enrolled in the creator's courses with no activity for `hours`. */
++export async function fetchInactiveStudents(creatorId: string, hours = 24): Promise<InactiveStudent[]> {
+   const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+ 
+   const { data, error } = await supabase
+@@ -19,20 +20,20 @@ export async function fetchInactiveStudents(hours = 24): Promise<
+       user_id,
+       course_id,
+       last_activity_at,
+-      users!inner ( telegram_id, first_name, username ),
+-      courses!inner ( title )
++      users!inner ( first_name, username ),
++      courses!inner ( title, creator_id )
+     `)
++    .eq('courses.creator_id', creatorId)
+     .lt('last_activity_at', cutoff);
+ 
+   if (error) throw error;
+ 
+   return (data ?? []).map((row: Record<string, unknown>) => {
+-    const user = row.users as { telegram_id: number; first_name: string; username: string | null };
++    const user = row.users as { first_name: string; username: string | null };
+     const course = row.courses as { title: string };
+     return {
+       user_id: row.user_id as string,
+       course_id: row.course_id as string,
+-      telegram_id: user.telegram_id,
+       first_name: user.first_name,
+       username: user.username,
+       last_activity_at: row.last_activity_at as string,
+@@ -41,41 +42,35 @@ export async function fetchInactiveStudents(hours = 24): Promise<
+   });
+ }
+ 
++/**
++ * Asks the server to message an enrolled student. The bot token stays on the
++ * server; the caller is verified from Telegram initData and must own the course.
++ */
+ export async function sendReminderNotification(
+-  telegramId: number,
+-  courseTitle: string
++  courseId: string,
++  studentUserId: string
+ ): Promise<{ sent: boolean; note: string }> {
+   try {
+-    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-reminder`;
+-    const response = await fetch(apiUrl, {
++    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
++    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-reminder`, {
+       method: 'POST',
+       headers: {
+-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
++        apikey: anonKey,
++        Authorization: `Bearer ${anonKey}`,
+         'Content-Type': 'application/json',
+       },
+       body: JSON.stringify({
+-        telegram_id: telegramId,
+-        course_title: courseTitle,
+-        bot_token: import.meta.env.VITE_TELEGRAM_BOT_TOKEN,
++        init_data: getTelegramInitData(),
++        course_id: courseId,
++        student_id: studentUserId,
+       }),
+     });
+ 
+-    if (!response.ok) {
+-      const errorBody = await response.json().catch(() => ({}));
+-      return {
+-        sent: false,
+-        note: errorBody.error || `Request failed (${response.status})`,
+-      };
+-    }
+-
+-    const data = await response.json();
+-    if (data.sent) {
++    const data = await response.json().catch(() => ({}));
++    if (response.ok && data.sent) {
+       return { sent: true, note: 'Reminder sent successfully.' };
+     }
+-    return {
+-      sent: false,
+-      note: data.error || 'Failed to send reminder.',
+-    };
++    return { sent: false, note: data.error || `Request failed (${response.status})` };
+   } catch (err) {
+     return {
+       sent: false,
+diff --git a/src/lib/session.ts b/src/lib/session.ts
+new file mode 100644
+index 0000000..3071b8e
+--- /dev/null
++++ b/src/lib/session.ts
+@@ -0,0 +1,66 @@
++import type { User } from './types';
++import { getTelegramInitData } from './telegram';
++
++const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
++const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
++
++// Refresh the token a little before it actually expires.
++const REFRESH_MARGIN_SECONDS = 60;
++
++interface Session {
++  token: string;
++  expiresAt: number; // unix seconds
++  user: User;
++}
++
++let session: Session | null = null;
++let inflight: Promise<Session> | null = null;
++
++async function requestSession(initData: string): Promise<Session> {
++  const res = await fetch(`${supabaseUrl}/functions/v1/auth-telegram`, {
++    method: 'POST',
++    headers: {
++      'Content-Type': 'application/json',
++      apikey: supabaseAnonKey ?? '',
++      Authorization: `Bearer ${supabaseAnonKey}`,
++    },
++    body: JSON.stringify({ init_data: initData }),
++  });
++
++  const body = await res.json().catch(() => ({}));
++  if (!res.ok || !body.token || !body.user) {
++    throw new Error(body.error || `Sign-in failed (${res.status})`);
++  }
++  return { token: body.token, expiresAt: body.expires_at, user: body.user as User };
++}
++
++/** Verifies the Telegram session server-side and stores the resulting JWT. */
++export function signIn(): Promise<Session> {
++  const initData = getTelegramInitData();
++  if (!initData) return Promise.reject(new Error('Telegram session data is missing'));
++
++  // Collapse concurrent callers (e.g. several queries firing at once) into one request.
++  if (!inflight) {
++    inflight = requestSession(initData)
++      .then((s) => {
++        session = s;
++        return s;
++      })
++      .finally(() => {
++        inflight = null;
++      });
++  }
++  return inflight;
++}
++
++/** Returns a valid access token, renewing it when it is about to expire. */
++export async function getAccessToken(): Promise<string | null> {
++  if (!session) return null;
++  const now = Math.floor(Date.now() / 1000);
++  if (session.expiresAt - now > REFRESH_MARGIN_SECONDS) return session.token;
++  try {
++    return (await signIn()).token;
++  } catch {
++    return null;
++  }
++}
+diff --git a/src/lib/supabase.ts b/src/lib/supabase.ts
+index 83a7490..3833b43 100644
+--- a/src/lib/supabase.ts
++++ b/src/lib/supabase.ts
+@@ -1,4 +1,5 @@
+ import { createClient } from '@supabase/supabase-js';
++import { getAccessToken } from './session';
+ 
+ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+@@ -9,9 +10,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
+   );
+ }
+ 
++// Requests carry the per-user JWT issued by the `auth-telegram` Edge Function so
++// that Row Level Security can scope data with auth.uid(). Before sign-in (no
++// token yet) supabase-js falls back to the anon key, which has no table access.
+ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+-  auth: {
+-    persistSession: false,
+-    autoRefreshToken: false,
+-  },
++  accessToken: getAccessToken,
+ });
+diff --git a/src/lib/telegram.ts b/src/lib/telegram.ts
+index 52efd62..5b25cd5 100644
+--- a/src/lib/telegram.ts
++++ b/src/lib/telegram.ts
+@@ -10,6 +10,7 @@ interface TelegramWebApp {
+   initData: string;
+   initDataUnsafe: {
+     user?: TelegramUserData;
++    start_param?: string;
+   };
+   platform?: string;
+   ready: () => void;
+@@ -66,6 +67,15 @@ export function getTelegramUser(): TelegramUserData | null {
+   return null;
+ }
+ 
++/** Raw signed initData string; must be verified server-side, never trusted as-is. */
++export function getTelegramInitData(): string {
++  return getTelegramWebApp()?.initData ?? '';
++}
++
++export function getTelegramStartParam(): string | null {
++  return getTelegramWebApp()?.initDataUnsafe?.start_param ?? null;
++}
++
+ export function isRunningInTelegram(): boolean {
+   // The Telegram WebApp script is only injected by Telegram clients
+   // (ios, android, web, desktop). Its mere presence confirms we're inside
+@@ -99,20 +109,41 @@ export function hapticFeedback(type: 'light' | 'medium' | 'heavy' | 'success' |
+   }
+ }
+ 
+-export function openTelegramLink(url: string): void {
++/** Returns a normalized http(s) URL, or null for anything else (javascript:, data:, ...). */
++export function sanitizeUrl(url: string | null | undefined): string | null {
++  if (!url) return null;
++  try {
++    const parsed = new URL(url.trim());
++    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.toString() : null;
++  } catch {
++    return null;
++  }
++}
++
++function isTelegramLink(url: string): boolean {
++  const host = new URL(url).hostname;
++  return host === 't.me' || host === 'telegram.me' || host.endsWith('.t.me');
++}
++
++export function openExternalLink(url: string): void {
++  const safe = sanitizeUrl(url);
++  if (!safe) return;
+   const tg = getTelegramWebApp();
+   if (tg) {
+-    tg.openTelegramLink(url);
++    tg.openLink(safe);
+   } else {
+-    window.open(url, '_blank');
++    window.open(safe, '_blank', 'noopener,noreferrer');
+   }
+ }
+ 
+-export function openExternalLink(url: string): void {
++export function openTelegramLink(url: string): void {
++  const safe = sanitizeUrl(url);
++  if (!safe) return;
+   const tg = getTelegramWebApp();
+-  if (tg) {
+-    tg.openLink(url);
++  // openTelegramLink only accepts t.me links; anything else goes to the browser.
++  if (tg && isTelegramLink(safe)) {
++    tg.openTelegramLink(safe);
+   } else {
+-    window.open(url, '_blank');
++    openExternalLink(safe);
+   }
+ }
+diff --git a/src/screens/CourseEditor.tsx b/src/screens/CourseEditor.tsx
+index 0b08ee8..6a66f41 100644
+--- a/src/screens/CourseEditor.tsx
++++ b/src/screens/CourseEditor.tsx
+@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
+ import {
+   Plus, ChevronDown, ChevronUp, Trash2, Edit2,
+   Save, X, Globe, GlobeLock, FileText, Link as LinkIcon, Download, Send,
+-  BookOpen, Video, Type, Inbox, GripVertical, CheckCircle2,
++  BookOpen,
+ } from 'lucide-react';
+ import { Card } from '@/components/Card';
+ import { LoadingScreen } from '@/components/Spinner';
+@@ -15,33 +15,10 @@ import {
+   fetchModulesWithLessons,
+   fetchResourcesByLesson,
+ } from '@/lib/courseService';
+-import { hapticFeedback } from '@/lib/telegram';
+-import { fetchPendingImports, importMessageToLesson, deleteImport } from '@/lib/importService';
+-import type { Course, ModuleWithLessons, Lesson, Resource, ResourceType, ImportedMessage, ImportMediaType } from '@/lib/types';
+-
+-type EditView = 'overview' | 'modules' | 'imports' | 'lesson';
+-
+-type DragSource = { type: 'module'; id: string; index: number } | { type: 'lesson'; id: string; moduleId: string; index: number };
+-
+-const lessonBadgeColors: Record<string, string> = {
+-  video: 'bg-red-50 text-red-500',
+-  pdf: 'bg-orange-50 text-orange-500',
+-  text: 'bg-slate-100 text-slate-500',
+-  link: 'bg-blue-50 text-blue-500',
+-  telegram: 'bg-cyan-50 text-cyan-500',
+-};
+-
+-function getLessonContentType(lesson: Lesson): { type: string; label: string; icon: typeof FileText } {
+-  if (lesson.telegram_url) {
+-    const url = lesson.telegram_url.toLowerCase();
+-    if (url.includes('youtube.com') || url.includes('youtu.be')) return { type: 'video', label: 'Video', icon: Video };
+-    if (url.includes('.pdf')) return { type: 'pdf', label: 'PDF', icon: FileText };
+-    if (url.includes('t.me')) return { type: 'telegram', label: 'Telegram', icon: Send };
+-    return { type: 'link', label: 'Link', icon: LinkIcon };
+-  }
+-  if (lesson.content && lesson.content.trim()) return { type: 'text', label: 'Text', icon: Type };
+-  return { type: 'text', label: 'Empty', icon: FileText };
+-}
++import { hapticFeedback, sanitizeUrl } from '@/lib/telegram';
++import type { Course, ModuleWithLessons, Lesson, Resource, ResourceType } from '@/lib/types';
++
++type EditView = 'overview' | 'modules' | 'lesson';
+ 
+ export function CourseEditor({
+   courseId,
+@@ -57,7 +34,8 @@ export function CourseEditor({
+   const [modules, setModules] = useState<ModuleWithLessons[]>([]);
+   const [view, setView] = useState<EditView>('overview');
+   const [loading, setLoading] = useState(true);
+-  const [error, setError] = useState<string | null>(null);
++  const [error, setError] = useState<string | null>(null); // fatal: course couldn't be loaded
++  const [actionError, setActionError] = useState<string | null>(null); // recoverable: a save/delete failed
+ 
+   // Form states
+   const [title, setTitle] = useState('');
+@@ -91,6 +69,11 @@ export function CourseEditor({
+         setLoading(false);
+         return;
+       }
++      if (c.creator_id !== user.id) {
++        setError('You can only edit your own courses');
++        setLoading(false);
++        return;
++      }
+       setCourse(c);
+       setTitle(c.title);
+       setDescription(c.description ?? '');
+@@ -125,8 +108,18 @@ export function CourseEditor({
+   // === Course save ===
+   const handleSaveCourse = async () => {
+     if (!user || !title.trim()) return;
++    const cleanSlug = slug.trim().toLowerCase();
++    if (cleanSlug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(cleanSlug)) {
++      setActionError('Slug can only contain lowercase letters, numbers and single hyphens');
++      return;
++    }
++    if (coverUrl.trim() && !sanitizeUrl(coverUrl)) {
++      setActionError('Cover image must be a valid http(s) link');
++      return;
++    }
+     try {
+       setSaving(true);
++      setActionError(null);
+       if (course) {
+         const { error: updErr } = await supabase
+           .from('courses')
+@@ -134,11 +127,11 @@ export function CourseEditor({
+             title: title.trim(),
+             description: description.trim() || null,
+             cover_url: coverUrl.trim() || null,
+-            slug: slug.trim() || null,
++            slug: cleanSlug || null,
+           })
+           .eq('id', course.id);
+         if (updErr) throw updErr;
+-        setCourse({ ...course, title: title.trim(), description: description.trim() || null, cover_url: coverUrl.trim() || null, slug: slug.trim() || null });
++        setCourse({ ...course, title: title.trim(), description: description.trim() || null, cover_url: coverUrl.trim() || null, slug: cleanSlug || null });
+       } else {
+         const { data, error: insErr } = await supabase
+           .from('courses')
+@@ -147,7 +140,7 @@ export function CourseEditor({
+             title: title.trim(),
+             description: description.trim() || null,
+             cover_url: coverUrl.trim() || null,
+-            slug: slug.trim() || null,
++            slug: cleanSlug || null,
+             status: 'draft',
+           })
+           .select()
+@@ -157,7 +150,12 @@ export function CourseEditor({
+         setView('modules');
+       }
+     } catch (err) {
+-      setError(err instanceof Error ? err.message : 'Failed to save course');
++      const code = (err as { code?: string } | null)?.code;
++      setActionError(
++        code === '23505'
++          ? 'That slug is already taken — choose another one'
++          : err instanceof Error ? err.message : 'Failed to save course'
++      );
+     } finally {
+       setSaving(false);
+     }
+@@ -176,7 +174,7 @@ export function CourseEditor({
+       setCourse({ ...course, status: newStatus });
+       hapticFeedback('success');
+     } catch (err) {
+-      setError(err instanceof Error ? err.message : 'Failed to update status');
++      setActionError(err instanceof Error ? err.message : 'Failed to update status');
+     }
+   };
+ 
+@@ -198,7 +196,7 @@ export function CourseEditor({
+       setModuleTitleInput('');
+       hapticFeedback('light');
+     } catch (err) {
+-      setError(err instanceof Error ? err.message : 'Failed to add module');
++      setActionError(err instanceof Error ? err.message : 'Failed to add module');
+     }
+   };
+ 
+@@ -214,7 +212,7 @@ export function CourseEditor({
+       setEditingModuleId(null);
+       setModuleTitleInput('');
+     } catch (err) {
+-      setError(err instanceof Error ? err.message : 'Failed to rename module');
++      setActionError(err instanceof Error ? err.message : 'Failed to rename module');
+     }
+   };
+ 
+@@ -226,7 +224,7 @@ export function CourseEditor({
+       setModules(modules.filter((m) => m.id !== moduleId));
+       hapticFeedback('warning');
+     } catch (err) {
+-      setError(err instanceof Error ? err.message : 'Failed to delete module');
++      setActionError(err instanceof Error ? err.message : 'Failed to delete module');
+     }
+   };
+ 
+@@ -239,11 +237,16 @@ export function CourseEditor({
+     const newModules = [...modules];
+     [newModules[idx], newModules[swapIdx]] = [newModules[swapIdx], newModules[idx]];
+ 
+-    // Update positions
+-    for (let i = 0; i < newModules.length; i++) {
+-      await supabase.from('modules').update({ position: i }).eq('id', newModules[i].id);
++    try {
++      const results = await Promise.all(
++        newModules.map((m, i) => supabase.from('modules').update({ position: i }).eq('id', m.id))
++      );
++      const failed = results.find((r) => r.error);
++      if (failed?.error) throw failed.error;
++      setModules(newModules);
++    } catch (err) {
++      setActionError(err instanceof Error ? err.message : 'Failed to reorder modules');
+     }
+-    setModules(newModules);
+   };
+ 
+   // === Lesson CRUD ===
+@@ -256,7 +259,12 @@ export function CourseEditor({
+     lessonId: string | null;
+   }) => {
+     if (!course || !lessonData.title.trim()) return;
++    if (lessonData.telegram_url.trim() && !sanitizeUrl(lessonData.telegram_url)) {
++      setActionError('Lesson link must be a valid http(s) or t.me link');
++      return;
++    }
+     try {
++      setActionError(null);
+       const mod = modules.find((m) => m.id === lessonData.moduleId);
+       if (!mod) return;
+ 
+@@ -308,7 +316,7 @@ export function CourseEditor({
+       setEditingLesson(null);
+       hapticFeedback('light');
+     } catch (err) {
+-      setError(err instanceof Error ? err.message : 'Failed to save lesson');
++      setActionError(err instanceof Error ? err.message : 'Failed to save lesson');
+     }
+   };
+ 
+@@ -322,7 +330,7 @@ export function CourseEditor({
+       ));
+       hapticFeedback('warning');
+     } catch (err) {
+-      setError(err instanceof Error ? err.message : 'Failed to delete lesson');
++      setActionError(err instanceof Error ? err.message : 'Failed to delete lesson');
+     }
+   };
+ 
+@@ -337,18 +345,27 @@ export function CourseEditor({
+     const newLessons = [...mod.lessons];
+     [newLessons[idx], newLessons[swapIdx]] = [newLessons[swapIdx], newLessons[idx]];
+ 
+-    for (let i = 0; i < newLessons.length; i++) {
+-      await supabase.from('lessons').update({ position: i }).eq('id', newLessons[i].id);
++    try {
++      const results = await Promise.all(
++        newLessons.map((l, i) => supabase.from('lessons').update({ position: i }).eq('id', l.id))
++      );
++      const failed = results.find((r) => r.error);
++      if (failed?.error) throw failed.error;
++      setModules(modules.map((m) =>
++        m.id === moduleId ? { ...m, lessons: newLessons } : m
++      ));
++    } catch (err) {
++      setActionError(err instanceof Error ? err.message : 'Failed to reorder lessons');
+     }
+-
+-    setModules(modules.map((m) =>
+-      m.id === moduleId ? { ...m, lessons: newLessons } : m
+-    ));
+   };
+ 
+   // === Resource CRUD ===
+   const handleAddResource = async (lessonId: string, resource: { title: string; type: ResourceType; url: string; description: string }) => {
+     if (!resource.title.trim() || !resource.url.trim()) return;
++    if (!sanitizeUrl(resource.url)) {
++      setActionError('Resource link must be a valid http(s) or t.me link');
++      return;
++    }
+     try {
+       const { data, error: err } = await supabase
+         .from('resources')
+@@ -372,7 +389,7 @@ export function CourseEditor({
+       hapticFeedback('light');
+       return data;
+     } catch (err) {
+-      setError(err instanceof Error ? err.message : 'Failed to add resource');
++      setActionError(err instanceof Error ? err.message : 'Failed to add resource');
+     }
+   };
+ 
+@@ -382,7 +399,7 @@ export function CourseEditor({
+       if (err) throw err;
+       hapticFeedback('warning');
+     } catch (err) {
+-      setError(err instanceof Error ? err.message : 'Failed to delete resource');
++      setActionError(err instanceof Error ? err.message : 'Failed to delete resource');
+     }
+   };
+ 
+@@ -434,6 +451,17 @@ export function CourseEditor({
+       )}
+ 
+       <div className="px-4 py-5 space-y-5 pb-24">
++        {actionError && (
++          <div
++            role="alert"
++            className="flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
++          >
++            <span>{actionError}</span>
++            <button onClick={() => setActionError(null)} aria-label="Dismiss" className="flex-shrink-0">
++              <X className="h-4 w-4" />
++            </button>
++          </div>
++        )}
+         {view === 'overview' && (
+           <div className="space-y-4">
+             <Card className="p-5 space-y-4">
+diff --git a/src/screens/CoursePage.tsx b/src/screens/CoursePage.tsx
+index 836571f..97a0390 100644
+--- a/src/screens/CoursePage.tsx
++++ b/src/screens/CoursePage.tsx
+@@ -15,8 +15,9 @@ import {
+   calculateProgress,
+   updateLastLesson,
+   fetchCreatorName,
++  getLessonState,
+ } from '@/lib/courseService';
+-import type { Course, ModuleWithLessons, LessonProgress, LessonState } from '@/lib/types';
++import type { Course, ModuleWithLessons, LessonProgress, Enrollment } from '@/lib/types';
+ import { buildCourseDeepLink } from '@/lib/deepLink';
+ 
+ export function CoursePage({
+@@ -32,6 +33,7 @@ export function CoursePage({
+   const [course, setCourse] = useState<Course | null>(null);
+   const [modules, setModules] = useState<ModuleWithLessons[]>([]);
+   const [progressList, setProgressList] = useState<LessonProgress[]>([]);
++  const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
+   const [creatorName, setCreatorName] = useState<string>('');
+   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
+   const [loading, setLoading] = useState(true);
+@@ -58,9 +60,11 @@ export function CoursePage({
+         fetchEnrollment(user.id, courseId),
+       ]);
+ 
+-      if (!existingEnrollment) {
+-        await createEnrollment(user.id, courseId);
+-      }
++      // Creators previewing their own course shouldn't count as students.
++      const activeEnrollment =
++        existingEnrollment ??
++        (c.creator_id === user.id ? null : await createEnrollment(user.id, courseId));
++      setEnrollment(activeEnrollment);
+ 
+       setModules(mods);
+       setProgressList(lp);
+@@ -95,16 +99,27 @@ export function CoursePage({
+ 
+   const handleLessonClick = async (lessonId: string) => {
+     if (!user) return;
+-    await updateLastLesson(user.id, courseId, lessonId);
++    try {
++      await updateLastLesson(user.id, courseId, lessonId);
++    } catch {
++      // Tracking the last lesson is best-effort; never block opening it.
++    }
+     onOpenLesson(courseId, lessonId);
+   };
+ 
+   const handleCopyLink = () => {
+     if (!course) return;
+     const link = buildCourseDeepLink(course.id);
+-    navigator.clipboard?.writeText(link);
+-    setLinkCopied(true);
+-    setTimeout(() => setLinkCopied(false), 2000);
++    navigator.clipboard
++      ?.writeText(link)
++      .then(() => {
++        setLinkCopied(true);
++        setTimeout(() => setLinkCopied(false), 2000);
++      })
++      .catch(() => {
++        // Clipboard can be unavailable inside some Telegram webviews.
++        window.prompt('Copy this link:', link);
++      });
+   };
+ 
+   if (loading) return (
+@@ -127,10 +142,7 @@ export function CoursePage({
+   const progress = calculateProgress(modules, progressList);
+   const totalModules = modules.length;
+ 
+-  const getLessonState = (lessonId: string): LessonState => {
+-    if (completedSet.has(lessonId)) return 'completed';
+-    return 'not_started';
+-  };
++  const lastLessonId = enrollment?.last_lesson_id ?? null;
+ 
+   return (
+     <div className="min-h-screen bg-slate-50">
+@@ -223,7 +235,7 @@ export function CoursePage({
+                     ) : (
+                       <div className="divide-y divide-slate-100">
+                         {module.lessons.map((lesson, lIdx) => {
+-                          const state = getLessonState(lesson.id);
++                          const state = getLessonState(lesson.id, completedSet, lastLessonId);
+                           return (
+                             <button
+                               key={lesson.id}
+diff --git a/src/screens/CreatorDashboard.tsx b/src/screens/CreatorDashboard.tsx
+index 10be152..0fe7650 100644
+--- a/src/screens/CreatorDashboard.tsx
++++ b/src/screens/CreatorDashboard.tsx
+@@ -38,17 +38,17 @@ export function CreatorDashboard({
+       const myCourses = await fetchCoursesByCreator(user.id);
+       setCourses(myCourses);
+ 
+-      const statsMap: Record<string, CourseStats> = {};
+-      for (const course of myCourses) {
+-        const modules = await fetchModulesWithLessons(course.id);
+-        const lessonCount = modules.reduce((sum, m) => sum + m.lessons.length, 0);
+-        const studentCount = await countEnrollmentsForCourse(course.id);
+-        statsMap[course.id] = {
+-          moduleCount: modules.length,
+-          lessonCount,
+-          studentCount,
+-        };
+-      }
++      const entries = await Promise.all(
++        myCourses.map(async (course) => {
++          const [modules, studentCount] = await Promise.all([
++            fetchModulesWithLessons(course.id),
++            countEnrollmentsForCourse(course.id),
++          ]);
++          const lessonCount = modules.reduce((sum, m) => sum + m.lessons.length, 0);
++          return [course.id, { moduleCount: modules.length, lessonCount, studentCount }] as const;
++        })
++      );
++      const statsMap: Record<string, CourseStats> = Object.fromEntries(entries);
+       setStats(statsMap);
+     } catch (err) {
+       setError(err instanceof Error ? err.message : 'Failed to load dashboard');
+diff --git a/src/screens/LessonPage.tsx b/src/screens/LessonPage.tsx
+index ee7865b..e03b02e 100644
+--- a/src/screens/LessonPage.tsx
++++ b/src/screens/LessonPage.tsx
+@@ -52,6 +52,7 @@ export function LessonPage({
+   const [error, setError] = useState<string | null>(null);
+   const [marking, setMarking] = useState(false);
+   const [showSuccess, setShowSuccess] = useState(false);
++  const [actionError, setActionError] = useState<string | null>(null);
+ 
+   const load = useCallback(async () => {
+     if (!user) return;
+@@ -109,13 +110,15 @@ export function LessonPage({
+     if (!user || completed || marking) return;
+     try {
+       setMarking(true);
++      setActionError(null);
+       await markLessonComplete(user.id, courseId, lessonId);
+       setCompleted(true);
+       setShowSuccess(true);
+       hapticFeedback('success');
+       setTimeout(() => setShowSuccess(false), 2500);
+     } catch (err) {
+-      setError(err instanceof Error ? err.message : 'Failed to mark lesson as complete');
++      // Keep the lesson on screen; a failed save shouldn't throw the learner out of it.
++      setActionError(err instanceof Error ? err.message : 'Failed to mark lesson as complete');
+     } finally {
+       setMarking(false);
+     }
+@@ -261,10 +264,15 @@ export function LessonPage({
+       {/* Complete button — fixed bottom */}
+       <div className="fixed bottom-0 left-0 right-0 z-20 bg-white/90 backdrop-blur-md border-t border-slate-200/60 px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
+         <div className="max-w-lg mx-auto">
++          {actionError && (
++            <div role="alert" className="mb-2 text-center text-sm text-red-600">
++              {actionError}
++            </div>
++          )}
+           {showSuccess && (
+             <div className="mb-2 flex items-center justify-center gap-1.5 text-green-600 text-sm font-medium animate-pulse">
+               <CheckCircle2 className="h-4 w-4" />
+-              Lesson completed! Next lesson is ready.
++              {nextLesson ? 'Lesson completed! Next lesson is ready.' : 'Lesson completed!'}
+             </div>
+           )}
+           <button
+diff --git a/src/screens/Profile.tsx b/src/screens/Profile.tsx
+index 338cbf6..d909f8c 100644
+--- a/src/screens/Profile.tsx
++++ b/src/screens/Profile.tsx
+@@ -1,5 +1,5 @@
+ import { useState } from 'react';
+-import { User as UserIcon, ArrowLeftRight, Info, Bell, Shield } from 'lucide-react';
++import { ArrowLeftRight, Info, Bell, Shield } from 'lucide-react';
+ import { Card } from '@/components/Card';
+ import { useUser } from '@/hooks/useUser';
+ import { isRunningInTelegram } from '@/lib/telegram';
+diff --git a/src/screens/StudentHome.tsx b/src/screens/StudentHome.tsx
+index feab245..6ef86bc 100644
+--- a/src/screens/StudentHome.tsx
++++ b/src/screens/StudentHome.tsx
+@@ -10,9 +10,8 @@ import {
+   fetchModulesWithLessons,
+   fetchLessonProgress,
+   findNextLesson,
+-  getAllLessonsOrdered,
+ } from '@/lib/courseService';
+-import type { Course, CourseProgress, Enrollment, Lesson, ModuleWithLessons } from '@/lib/types';
++import type { Course, CourseProgress, Enrollment, Lesson } from '@/lib/types';
+ 
+ interface ContinueLearningData {
+   course: Course;
+diff --git a/supabase/config.toml b/supabase/config.toml
+index f37752b..6312f5f 100644
+--- a/supabase/config.toml
++++ b/supabase/config.toml
+@@ -1,5 +1,13 @@
++# send-reminder authenticates the caller itself (Telegram initData), so the
++# gateway only needs to accept the project's anon key.
+ [functions.send-reminder]
+ verify_jwt = true
+ 
++# Called by Telegram, which cannot send a Supabase JWT. Protected instead by the
++# X-Telegram-Bot-Api-Secret-Token header (TELEGRAM_WEBHOOK_SECRET).
+ [functions.telegram-webhook]
+ verify_jwt = false
++
++# Called before the user has a session; it verifies Telegram initData and mints one.
++[functions.auth-telegram]
++verify_jwt = false
+diff --git a/supabase/functions/_shared/telegram.ts b/supabase/functions/_shared/telegram.ts
+new file mode 100644
+index 0000000..fa02e48
+--- /dev/null
++++ b/supabase/functions/_shared/telegram.ts
+@@ -0,0 +1,109 @@
++// Shared helpers for Edge Functions: Telegram initData verification,
++// HS256 JWT signing, and CORS headers.
++
++export const corsHeaders = {
++  "Access-Control-Allow-Origin": "*",
++  "Access-Control-Allow-Methods": "POST, OPTIONS",
++  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
++};
++
++export function json(body: unknown, status = 200): Response {
++  return new Response(JSON.stringify(body), {
++    status,
++    headers: { ...corsHeaders, "Content-Type": "application/json" },
++  });
++}
++
++const enc = new TextEncoder();
++
++async function hmacSha256(key: Uint8Array, data: string | Uint8Array): Promise<Uint8Array> {
++  const cryptoKey = await crypto.subtle.importKey(
++    "raw",
++    key as BufferSource,
++    { name: "HMAC", hash: "SHA-256" },
++    false,
++    ["sign"],
++  );
++  const payload = typeof data === "string" ? enc.encode(data) : data;
++  return new Uint8Array(await crypto.subtle.sign("HMAC", cryptoKey, payload as BufferSource));
++}
++
++function toHex(bytes: Uint8Array): string {
++  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
++}
++
++function timingSafeEqual(a: string, b: string): boolean {
++  if (a.length !== b.length) return false;
++  let diff = 0;
++  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
++  return diff === 0;
++}
++
++export interface VerifiedTelegramUser {
++  id: number;
++  first_name?: string;
++  last_name?: string;
++  username?: string;
++  photo_url?: string;
++}
++
++/**
++ * Verifies Telegram Mini App `initData` as described in
++ * https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
++ * Returns the user only if the HMAC is valid and auth_date is fresh.
++ */
++export async function verifyInitData(
++  initData: string,
++  botToken: string,
++  maxAgeSeconds = 24 * 60 * 60,
++): Promise<VerifiedTelegramUser | null> {
++  if (!initData || !botToken) return null;
++
++  const params = new URLSearchParams(initData);
++  const hash = params.get("hash");
++  if (!hash) return null;
++  params.delete("hash");
++
++  const dataCheckString = [...params.entries()]
++    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
++    .map(([k, v]) => `${k}=${v}`)
++    .join("\n");
++
++  const secretKey = await hmacSha256(enc.encode("WebAppData"), botToken);
++  const expected = toHex(await hmacSha256(secretKey, dataCheckString));
++  if (!timingSafeEqual(expected, hash.toLowerCase())) return null;
++
++  const authDate = Number(params.get("auth_date"));
++  if (!Number.isFinite(authDate) || authDate <= 0) return null;
++  if (Math.floor(Date.now() / 1000) - authDate > maxAgeSeconds) return null;
++
++  const rawUser = params.get("user");
++  if (!rawUser) return null;
++  try {
++    const user = JSON.parse(rawUser) as VerifiedTelegramUser;
++    if (typeof user.id !== "number") return null;
++    return user;
++  } catch {
++    return null;
++  }
++}
++
++function base64Url(bytes: Uint8Array): string {
++  let binary = "";
++  for (const b of bytes) binary += String.fromCharCode(b);
++  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
++}
++
++/** Signs an HS256 JWT. `secret` must match the project's JWT secret. */
++export async function signJwt(
++  claims: Record<string, unknown>,
++  secret: string,
++  ttlSeconds: number,
++): Promise<{ token: string; expiresAt: number }> {
++  const now = Math.floor(Date.now() / 1000);
++  const exp = now + ttlSeconds;
++  const header = base64Url(enc.encode(JSON.stringify({ alg: "HS256", typ: "JWT" })));
++  const payload = base64Url(enc.encode(JSON.stringify({ ...claims, iat: now, exp })));
++  const signature = base64Url(await hmacSha256(enc.encode(secret), `${header}.${payload}`));
++  return { token: `${header}.${payload}.${signature}`, expiresAt: exp };
++}
+diff --git a/supabase/functions/auth-telegram/index.ts b/supabase/functions/auth-telegram/index.ts
+new file mode 100644
+index 0000000..66830d0
+--- /dev/null
++++ b/supabase/functions/auth-telegram/index.ts
+@@ -0,0 +1,70 @@
++// Exchanges verified Telegram Mini App initData for a short-lived Supabase JWT.
++// The JWT's `sub` is the users.id of the Telegram user, so RLS policies can use
++// auth.uid() to scope access to the caller's own data.
++//
++// Required secrets (supabase secrets set ...):
++//   TELEGRAM_BOT_TOKEN  - the bot token (never ship it to the browser)
++//   APP_JWT_SECRET      - the project's JWT secret (Settings > API > JWT Secret)
++import { createClient } from "npm:@supabase/supabase-js@2.57.4";
++import { corsHeaders, json, signJwt, verifyInitData } from "../_shared/telegram.ts";
++
++const TOKEN_TTL_SECONDS = 60 * 60;
++
++Deno.serve(async (req: Request) => {
++  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
++  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
++
++  const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN");
++  const jwtSecret = Deno.env.get("APP_JWT_SECRET");
++  const supabaseUrl = Deno.env.get("SUPABASE_URL");
++  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
++  if (!botToken || !jwtSecret || !supabaseUrl || !serviceRoleKey) {
++    console.error("auth-telegram: missing required environment variables");
++    return json({ error: "Server is not configured" }, 500);
++  }
++
++  try {
++    const body = await req.json().catch(() => null);
++    const initData = typeof body?.init_data === "string" ? body.init_data : "";
++
++    const tgUser = await verifyInitData(initData, botToken);
++    if (!tgUser) return json({ error: "Invalid Telegram session" }, 401);
++
++    const supabase = createClient(supabaseUrl, serviceRoleKey, {
++      auth: { persistSession: false, autoRefreshToken: false },
++    });
++
++    // `role` is intentionally not part of the payload, so existing users keep
++    // theirs and new users get the column default ('student').
++    const { data: user, error } = await supabase
++      .from("users")
++      .upsert(
++        {
++          telegram_id: tgUser.id,
++          username: tgUser.username ?? null,
++          first_name: tgUser.first_name ?? "Student",
++          photo_url: tgUser.photo_url ?? null,
++        },
++        { onConflict: "telegram_id" },
++      )
++      .select()
++      .single();
++    if (error || !user) throw error ?? new Error("Could not load user");
++
++    const { token, expiresAt } = await signJwt(
++      {
++        aud: "authenticated",
++        role: "authenticated",
++        sub: user.id,
++        telegram_id: user.telegram_id,
++      },
++      jwtSecret,
++      TOKEN_TTL_SECONDS,
++    );
++
++    return json({ token, expires_at: expiresAt, user });
++  } catch (err) {
++    console.error("auth-telegram error:", err);
++    return json({ error: "Authentication failed" }, 500);
++  }
++});
+diff --git a/supabase/functions/send-reminder/index.ts b/supabase/functions/send-reminder/index.ts
+index c5d18c6..5853714 100644
+--- a/supabase/functions/send-reminder/index.ts
++++ b/supabase/functions/send-reminder/index.ts
+@@ -1,69 +1,99 @@
+-const corsHeaders = {
+-  "Access-Control-Allow-Origin": "*",
+-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+-};
++// Lets a course creator nudge an enrolled student via the bot.
++//
++// The bot token lives only in the TELEGRAM_BOT_TOKEN secret. The caller proves
++// who they are with Telegram initData, must own the course, and the student
++// must be enrolled in it. The target chat id and course title come from the
++// database, never from the request.
++import { createClient } from "npm:@supabase/supabase-js@2.57.4";
++import { corsHeaders, json, verifyInitData } from "../_shared/telegram.ts";
++
++const MIN_HOURS_BETWEEN_REMINDERS = 24;
+ 
+ Deno.serve(async (req: Request) => {
+-  if (req.method === "OPTIONS") {
+-    return new Response(null, { status: 200, headers: corsHeaders });
++  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
++  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
++
++  const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN");
++  const supabaseUrl = Deno.env.get("SUPABASE_URL");
++  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
++  if (!botToken || !supabaseUrl || !serviceRoleKey) {
++    console.error("send-reminder: missing required environment variables");
++    return json({ error: "Server is not configured" }, 500);
+   }
+ 
+   try {
+-    const body = await req.json();
+-    const telegramId = body?.telegram_id;
+-    const courseTitle = body?.course_title;
+-    const botToken = body?.bot_token;
+-
+-    if (!botToken) {
+-      return new Response(
+-        JSON.stringify({ error: "bot_token is required." }),
+-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+-      );
++    const body = await req.json().catch(() => null);
++    const initData = typeof body?.init_data === "string" ? body.init_data : "";
++    const courseId = typeof body?.course_id === "string" ? body.course_id : "";
++    const studentId = typeof body?.student_id === "string" ? body.student_id : "";
++    if (!courseId || !studentId) {
++      return json({ error: "course_id and student_id are required" }, 400);
+     }
+ 
+-    if (!telegramId || !courseTitle) {
+-      return new Response(
+-        JSON.stringify({ error: "telegram_id and course_title are required." }),
+-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+-      );
++    const caller = await verifyInitData(initData, botToken);
++    if (!caller) return json({ error: "Invalid Telegram session" }, 401);
++
++    const supabase = createClient(supabaseUrl, serviceRoleKey, {
++      auth: { persistSession: false, autoRefreshToken: false },
++    });
++
++    const { data: callerRow } = await supabase
++      .from("users")
++      .select("id")
++      .eq("telegram_id", caller.id)
++      .maybeSingle();
++    if (!callerRow) return json({ error: "Unknown user" }, 403);
++
++    const { data: course } = await supabase
++      .from("courses")
++      .select("id, title, creator_id")
++      .eq("id", courseId)
++      .maybeSingle();
++    if (!course || course.creator_id !== callerRow.id) {
++      return json({ error: "You can only remind students of your own courses" }, 403);
+     }
+ 
+-    const text = `📚 Don't forget about your course "${courseTitle}"!\n\nYou haven't been active in a while. Jump back in and continue where you left off.`;
++    const { data: enrollment } = await supabase
++      .from("enrollments")
++      .select("id, last_reminded_at, users!inner ( telegram_id )")
++      .eq("course_id", courseId)
++      .eq("user_id", studentId)
++      .maybeSingle();
++    if (!enrollment) return json({ error: "Student is not enrolled in this course" }, 404);
+ 
+-    const tgResponse = await fetch(
+-      `https://api.telegram.org/bot${botToken}/sendMessage`,
+-      {
+-        method: "POST",
+-        headers: { "Content-Type": "application/json" },
+-        body: JSON.stringify({
+-          chat_id: telegramId,
+-          text,
+-          parse_mode: "HTML",
+-        }),
++    if (enrollment.last_reminded_at) {
++      const hoursSince = (Date.now() - new Date(enrollment.last_reminded_at).getTime()) / 3_600_000;
++      if (hoursSince < MIN_HOURS_BETWEEN_REMINDERS) {
++        return json({ sent: false, error: "This student was reminded recently" }, 429);
+       }
+-    );
++    }
+ 
+-    const tgData = await tgResponse.json();
++    const student = enrollment.users as unknown as { telegram_id: number };
++    const title = String(course.title).slice(0, 200);
++    const text =
++      `📚 Don't forget about your course "${title}"!\n\n` +
++      `You haven't been active in a while. Jump back in and continue where you left off.`;
++
++    // No parse_mode: the course title is user-controlled text.
++    const tgResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
++      method: "POST",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify({ chat_id: student.telegram_id, text }),
++    });
++    const tgData = await tgResponse.json().catch(() => ({}));
+ 
+     if (!tgData.ok) {
+-      return new Response(
+-        JSON.stringify({
+-          sent: false,
+-          error: tgData.description || "Telegram API returned an error",
+-        }),
+-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+-      );
++      return json({ sent: false, error: tgData.description || "Telegram API returned an error" }, 502);
+     }
+ 
+-    return new Response(
+-      JSON.stringify({ sent: true, message_id: tgData.result?.message_id }),
+-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+-    );
++    await supabase
++      .from("enrollments")
++      .update({ last_reminded_at: new Date().toISOString() })
++      .eq("id", enrollment.id);
++
++    return json({ sent: true, message_id: tgData.result?.message_id });
+   } catch (err) {
+-    return new Response(
+-      JSON.stringify({ error: err.message }),
+-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+-    );
++    console.error("send-reminder error:", err);
++    return json({ error: "Failed to send reminder" }, 500);
+   }
+ });
+diff --git a/supabase/functions/telegram-webhook/index.ts b/supabase/functions/telegram-webhook/index.ts
+index 9ebcb8a..2f3fccc 100644
+--- a/supabase/functions/telegram-webhook/index.ts
++++ b/supabase/functions/telegram-webhook/index.ts
+@@ -1,128 +1,153 @@
++// Receives bot updates and stores messages a creator sends/forwards to the bot
++// as pending imports.
++//
++// Security: Telegram must be configured with a secret token
++//   setWebhook?url=...&secret_token=<TELEGRAM_WEBHOOK_SECRET>
++// and every request is rejected unless it carries the same value in the
++// X-Telegram-Bot-Api-Secret-Token header. The function uses the service role
++// key, so it must never be callable anonymously.
+ import { createClient } from "npm:@supabase/supabase-js@2.57.4";
++import { corsHeaders, json } from "../_shared/telegram.ts";
+ 
+-const corsHeaders = {
+-  "Access-Control-Allow-Origin": "*",
+-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+-};
++interface Detected {
++  mediaType: "video" | "pdf" | "text" | "link" | "image" | "file";
++  mediaUrl: string | null;
++}
+ 
+-function detectMediaType(text: string): { mediaType: string; mediaUrl: string | null } {
+-  const lower = text.toLowerCase();
++// The subset of the Telegram Message object this function reads.
++interface TgMessage {
++  message_id?: number;
++  text?: string;
++  caption?: string;
++  chat?: { type?: string };
++  from?: { id?: number };
++  video?: unknown;
++  video_note?: unknown;
++  animation?: unknown;
++  document?: { mime_type?: string };
++  photo?: unknown;
++  forward_origin?: {
++    type?: string;
++    message_id?: number;
++    chat?: { username?: string };
++  };
++}
+ 
+-  if (lower.includes("youtube.com/watch") || lower.includes("youtu.be/") || lower.includes("youtube.com/shorts")) {
+-    const match = text.match(/(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)[\w-]+)/);
+-    return { mediaType: "video", mediaUrl: match ? match[1] : null };
+-  }
++function firstUrl(text: string): string | null {
++  const match = text.match(/https?:\/\/[^\s]+/);
++  return match ? match[0] : null;
++}
+ 
+-  if (lower.includes("t.me/") || lower.includes("telegram.org/")) {
+-    return { mediaType: "link", mediaUrl: null };
++function detectMediaType(message: TgMessage, text: string): Detected {
++  // Native attachments take priority over links in the caption.
++  if (message.video || message.video_note || message.animation) {
++    return { mediaType: "video", mediaUrl: channelPostUrl(message) };
+   }
+-
+-  if (lower.includes(".pdf")) {
+-    const match = text.match(/(https?:\/\/[^\s]+\.pdf[^\s]*)/);
+-    return { mediaType: "pdf", mediaUrl: match ? match[1] : null };
++  if (message.document) {
++    const isPdf = message.document.mime_type === "application/pdf";
++    return { mediaType: isPdf ? "pdf" : "file", mediaUrl: channelPostUrl(message) };
++  }
++  if (message.photo) {
++    return { mediaType: "image", mediaUrl: channelPostUrl(message) };
+   }
+ 
+-  if (lower.match(/https?:\/\//)) {
+-    const match = text.match(/(https?:\/\/[^\s]+)/);
+-    return { mediaType: "link", mediaUrl: match ? match[1] : null };
++  const lower = text.toLowerCase();
++  if (/(youtube\.com\/(watch|shorts)|youtu\.be\/)/.test(lower)) {
++    const match = text.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)[\w-]+/);
++    return { mediaType: "video", mediaUrl: match ? match[0] : null };
++  }
++  if (/https?:\/\/[^\s]+\.pdf(\?[^\s]*)?/i.test(text)) {
++    return { mediaType: "pdf", mediaUrl: text.match(/https?:\/\/[^\s]+\.pdf[^\s]*/i)![0] };
+   }
++  const url = firstUrl(text);
++  if (url) return { mediaType: "link", mediaUrl: url };
++
++  return { mediaType: "text", mediaUrl: channelPostUrl(message) };
++}
+ 
+-  return { mediaType: "text", mediaUrl: null };
++/** Public t.me link to the original post, when forwarded from a public channel. */
++function channelPostUrl(message: TgMessage): string | null {
++  const origin = message.forward_origin;
++  if (origin?.type === "channel" && origin.chat?.username && origin.message_id) {
++    return `https://t.me/${origin.chat.username}/${origin.message_id}`;
++  }
++  return null;
+ }
+ 
+-function extractTitle(text: string): string {
+-  const lines = text.trim().split("\n").filter((l) => l.trim());
+-  if (lines.length === 0) return "Untitled";
+-  const firstLine = lines[0].trim();
+-  if (firstLine.length <= 100) return firstLine;
+-  return firstLine.substring(0, 100) + "...";
++function extractTitle(text: string, fallback: string): string {
++  const firstLine = text.trim().split("\n").find((l) => l.trim());
++  if (!firstLine) return fallback;
++  const line = firstLine.trim();
++  return line.length <= 100 ? line : line.substring(0, 100) + "...";
+ }
+ 
+ Deno.serve(async (req: Request) => {
+-  if (req.method === "OPTIONS") {
+-    return new Response(null, { status: 200, headers: corsHeaders });
++  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
++  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
++
++  const expectedSecret = Deno.env.get("TELEGRAM_WEBHOOK_SECRET");
++  const supabaseUrl = Deno.env.get("SUPABASE_URL");
++  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
++  if (!expectedSecret || !supabaseUrl || !serviceRoleKey) {
++    console.error("telegram-webhook: missing required environment variables");
++    return json({ error: "Server is not configured" }, 500);
+   }
+ 
+-  try {
+-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
++  if (req.headers.get("X-Telegram-Bot-Api-Secret-Token") !== expectedSecret) {
++    return json({ error: "Unauthorized" }, 401);
++  }
+ 
+-    const body = await req.json();
+-    const message = body?.message;
++  try {
++    const body = await req.json().catch(() => null);
++    const message = body?.message as TgMessage | undefined;
++    if (!message) return json({ ok: true, note: "No message in body" });
+ 
+-    if (!message) {
+-      return new Response(
+-        JSON.stringify({ ok: true, note: "No message in body" }),
+-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+-      );
+-    }
++    // Only accept direct messages to the bot.
++    if (message.chat?.type !== "private") return json({ ok: true, note: "Ignored non-private chat" });
+ 
+-    const forwardOrigin = message.forward_origin || message.forward_from;
+-    const isForwarded = !!forwardOrigin || !!message.forward_from_chat;
+-    const text = message.text || message.caption || "";
+     const fromUser = message.from;
++    if (!fromUser?.id) return json({ ok: true, note: "No from user" });
+ 
+-    if (!fromUser) {
+-      return new Response(
+-        JSON.stringify({ ok: true, note: "No from user" }),
+-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+-      );
+-    }
++    // Ignore bot commands such as /start.
++    const text = message.text || message.caption || "";
++    if (text.startsWith("/")) return json({ ok: true, note: "Command ignored" });
+ 
+-    const telegramUserId = fromUser.id;
+-    const telegramMessageId = message.message_id ?? message.id ?? Date.now();
++    const telegramMessageId = message.message_id;
++    if (typeof telegramMessageId !== "number") return json({ ok: true, note: "No message id" });
+ 
+-    const supabase = createClient(supabaseUrl, serviceRoleKey);
++    const supabase = createClient(supabaseUrl, serviceRoleKey, {
++      auth: { persistSession: false, autoRefreshToken: false },
++    });
+ 
+     const { data: dbUser } = await supabase
+       .from("users")
+       .select("id")
+-      .eq("telegram_id", telegramUserId)
++      .eq("telegram_id", fromUser.id)
+       .maybeSingle();
+-
+     if (!dbUser) {
+-      return new Response(
+-        JSON.stringify({ ok: true, note: "User not found — open the Mini App first to register" }),
+-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+-      );
++      return json({ ok: true, note: "User not found — open the Mini App first to register" });
+     }
+ 
+-    const { mediaType, mediaUrl } = detectMediaType(text);
+-    const parsedTitle = extractTitle(text);
+-
+-    const { error: insertErr } = await supabase
+-      .from("imported_messages")
+-      .upsert(
+-        {
+-          creator_id: dbUser.id,
+-          telegram_message_id: telegramMessageId,
+-          raw_content: text || null,
+-          parsed_title: parsedTitle,
+-          media_type: mediaType,
+-          media_url: mediaUrl,
+-          status: "pending",
+-        },
+-        { onConflict: "creator_id,telegram_message_id" }
+-      );
+-
+-    if (insertErr) throw insertErr;
++    const { mediaType, mediaUrl } = detectMediaType(message, text);
++    const parsedTitle = extractTitle(text, mediaType === "text" ? "Untitled" : `Imported ${mediaType}`);
+ 
+-    return new Response(
+-      JSON.stringify({
+-        ok: true,
+-        note: isForwarded
+-          ? "Forwarded message imported successfully"
+-          : "Message imported successfully",
++    const { error: insertErr } = await supabase.from("imported_messages").upsert(
++      {
++        creator_id: dbUser.id,
++        telegram_message_id: telegramMessageId,
++        raw_content: text || null,
+         parsed_title: parsedTitle,
+         media_type: mediaType,
+-      }),
+-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
++        media_url: mediaUrl,
++        status: "pending",
++      },
++      { onConflict: "creator_id,telegram_message_id", ignoreDuplicates: true },
+     );
++    if (insertErr) throw insertErr;
++
++    return json({ ok: true, parsed_title: parsedTitle, media_type: mediaType });
+   } catch (err) {
+-    return new Response(
+-      JSON.stringify({ error: err.message }),
+-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+-    );
++    console.error("telegram-webhook error:", err);
++    return json({ error: "Failed to import message" }, 500);
+   }
+ });
+diff --git a/supabase/migrations/20261015000000_004_lock_down_rls.sql b/supabase/migrations/20261015000000_004_lock_down_rls.sql
+new file mode 100644
+index 0000000..5a7244c
+--- /dev/null
++++ b/supabase/migrations/20261015000000_004_lock_down_rls.sql
+@@ -0,0 +1,174 @@
++/*
++# Lock down Row Level Security
++
++Previously every table had `USING (true)` policies for `anon`, so anyone holding
++the public anon key could read, edit or delete all data and make themselves a
++creator. Identity is now established by the `auth-telegram` Edge Function, which
++verifies Telegram initData and issues a JWT whose `sub` is `users.id`. Policies
++below are scoped to `auth.uid()`.
++
++Deploy order matters:
++  1. deploy the `auth-telegram` function and set its secrets
++  2. deploy the new frontend
++  3. run this migration
++
++1. Changes
++- Adds `enrollments.last_reminded_at` (used to rate-limit reminders).
++- Drops every existing policy on the app tables and replaces them.
++- `anon` loses all access to app tables.
++- `users`: authenticated users can read public profile columns (not telegram_id)
++  and update only their own `role`. Row creation/profile sync is done by the
++  Edge Function with the service role.
++
++2. Access model
++- courses: published ones are readable by everyone signed in; owners see/manage their own.
++- modules / lessons / resources: readable when the parent course is visible,
++  writable only by the course owner.
++- enrollments / lesson_progress: a user manages their own rows; a course owner
++  can read enrollments for their courses (student counts).
++- imported_messages: creator-only.
++*/
++
++ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS last_reminded_at timestamptz;
++
++-- ---------------------------------------------------------------------------
++-- Drop all existing policies on app tables
++-- ---------------------------------------------------------------------------
++DO $$
++DECLARE r record;
++BEGIN
++  FOR r IN
++    SELECT policyname, tablename FROM pg_policies
++    WHERE schemaname = 'public'
++      AND tablename IN ('users','courses','modules','lessons','resources',
++                        'enrollments','lesson_progress','imported_messages')
++  LOOP
++    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', r.policyname, r.tablename);
++  END LOOP;
++END $$;
++
++-- ---------------------------------------------------------------------------
++-- Table privileges
++-- ---------------------------------------------------------------------------
++REVOKE ALL ON public.users, public.courses, public.modules, public.lessons,
++              public.resources, public.enrollments, public.lesson_progress,
++              public.imported_messages FROM anon;
++
++-- users: hide telegram_id from clients and allow changing only `role`.
++REVOKE ALL ON public.users FROM authenticated;
++GRANT SELECT (id, username, first_name, photo_url, role, created_at)
++  ON public.users TO authenticated;
++GRANT UPDATE (role) ON public.users TO authenticated;
++
++-- ---------------------------------------------------------------------------
++-- users
++-- ---------------------------------------------------------------------------
++CREATE POLICY users_select ON users FOR SELECT TO authenticated
++  USING (true);
++
++CREATE POLICY users_update_self ON users FOR UPDATE TO authenticated
++  USING (id = (SELECT auth.uid()))
++  WITH CHECK (id = (SELECT auth.uid()));
++
++-- ---------------------------------------------------------------------------
++-- courses
++-- ---------------------------------------------------------------------------
++CREATE POLICY courses_select ON courses FOR SELECT TO authenticated
++  USING (status = 'published' OR creator_id = (SELECT auth.uid()));
++
++CREATE POLICY courses_insert ON courses FOR INSERT TO authenticated
++  WITH CHECK (creator_id = (SELECT auth.uid()));
++
++CREATE POLICY courses_update ON courses FOR UPDATE TO authenticated
++  USING (creator_id = (SELECT auth.uid()))
++  WITH CHECK (creator_id = (SELECT auth.uid()));
++
++CREATE POLICY courses_delete ON courses FOR DELETE TO authenticated
++  USING (creator_id = (SELECT auth.uid()));
++
++-- ---------------------------------------------------------------------------
++-- modules (visibility follows the parent course's own RLS)
++-- ---------------------------------------------------------------------------
++CREATE POLICY modules_select ON modules FOR SELECT TO authenticated
++  USING (EXISTS (SELECT 1 FROM courses c WHERE c.id = modules.course_id));
++
++CREATE POLICY modules_write ON modules FOR ALL TO authenticated
++  USING (EXISTS (
++    SELECT 1 FROM courses c
++    WHERE c.id = modules.course_id AND c.creator_id = (SELECT auth.uid())))
++  WITH CHECK (EXISTS (
++    SELECT 1 FROM courses c
++    WHERE c.id = modules.course_id AND c.creator_id = (SELECT auth.uid())));
++
++-- ---------------------------------------------------------------------------
++-- lessons
++-- ---------------------------------------------------------------------------
++CREATE POLICY lessons_select ON lessons FOR SELECT TO authenticated
++  USING (EXISTS (SELECT 1 FROM modules m WHERE m.id = lessons.module_id));
++
++CREATE POLICY lessons_write ON lessons FOR ALL TO authenticated
++  USING (EXISTS (
++    SELECT 1 FROM modules m JOIN courses c ON c.id = m.course_id
++    WHERE m.id = lessons.module_id AND c.creator_id = (SELECT auth.uid())))
++  WITH CHECK (EXISTS (
++    SELECT 1 FROM modules m JOIN courses c ON c.id = m.course_id
++    WHERE m.id = lessons.module_id AND c.creator_id = (SELECT auth.uid())));
++
++-- ---------------------------------------------------------------------------
++-- resources
++-- ---------------------------------------------------------------------------
++CREATE POLICY resources_select ON resources FOR SELECT TO authenticated
++  USING (EXISTS (SELECT 1 FROM lessons l WHERE l.id = resources.lesson_id));
++
++CREATE POLICY resources_write ON resources FOR ALL TO authenticated
++  USING (EXISTS (
++    SELECT 1 FROM lessons l
++    JOIN modules m ON m.id = l.module_id
++    JOIN courses c ON c.id = m.course_id
++    WHERE l.id = resources.lesson_id AND c.creator_id = (SELECT auth.uid())))
++  WITH CHECK (EXISTS (
++    SELECT 1 FROM lessons l
++    JOIN modules m ON m.id = l.module_id
++    JOIN courses c ON c.id = m.course_id
++    WHERE l.id = resources.lesson_id AND c.creator_id = (SELECT auth.uid())));
++
++-- ---------------------------------------------------------------------------
++-- enrollments
++-- ---------------------------------------------------------------------------
++CREATE POLICY enrollments_select ON enrollments FOR SELECT TO authenticated
++  USING (
++    user_id = (SELECT auth.uid())
++    OR EXISTS (
++      SELECT 1 FROM courses c
++      WHERE c.id = enrollments.course_id AND c.creator_id = (SELECT auth.uid()))
++  );
++
++CREATE POLICY enrollments_insert ON enrollments FOR INSERT TO authenticated
++  WITH CHECK (
++    user_id = (SELECT auth.uid())
++    AND EXISTS (SELECT 1 FROM courses c WHERE c.id = enrollments.course_id)
++  );
++
++CREATE POLICY enrollments_update ON enrollments FOR UPDATE TO authenticated
++  USING (user_id = (SELECT auth.uid()))
++  WITH CHECK (user_id = (SELECT auth.uid()));
++
++CREATE POLICY enrollments_delete ON enrollments FOR DELETE TO authenticated
++  USING (user_id = (SELECT auth.uid()));
++
++-- ---------------------------------------------------------------------------
++-- lesson_progress
++-- ---------------------------------------------------------------------------
++CREATE POLICY lesson_progress_own ON lesson_progress FOR ALL TO authenticated
++  USING (user_id = (SELECT auth.uid()))
++  WITH CHECK (
++    user_id = (SELECT auth.uid())
++    AND EXISTS (SELECT 1 FROM lessons l WHERE l.id = lesson_progress.lesson_id)
++  );
++
++-- ---------------------------------------------------------------------------
++-- imported_messages
++-- ---------------------------------------------------------------------------
++CREATE POLICY imported_messages_own ON imported_messages FOR ALL TO authenticated
++  USING (creator_id = (SELECT auth.uid()))
++  WITH CHECK (creator_id = (SELECT auth.uid()));
+-- 
+2.43.0
+
