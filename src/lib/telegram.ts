@@ -38,6 +38,10 @@ interface TelegramWebApp {
   };
   openTelegramLink: (url: string) => void;
   openLink: (url: string) => void;
+  version?: string;
+  isVersionAtLeast?: (version: string) => boolean;
+  onEvent?: (event: string, handler: () => void) => void;
+  offEvent?: (event: string, handler: () => void) => void;
   /** Bot API 6.9+: asks the user to let the bot message them. */
   requestWriteAccess?: (callback?: (granted: boolean) => void) => void;
   HapticFeedback: {
@@ -93,12 +97,7 @@ export function initTelegramWebApp(): void {
   if (tg) {
     tg.ready();
     tg.expand();
-    try {
-      tg.setHeaderColor('#ffffff');
-      tg.setBackgroundColor('#f8fafc');
-    } catch {
-      // some versions don't support these
-    }
+    // Header/background colors follow the app theme; see src/lib/theme.tsx.
   }
 }
 

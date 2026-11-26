@@ -13,6 +13,7 @@ import { CreatorDashboard } from '@/screens/CreatorDashboard';
 import { CourseEditor } from '@/screens/CourseEditor';
 import { ImportInbox } from '@/screens/ImportInbox';
 import { useI18n } from '@/lib/i18n';
+import { useBackButton } from '@/hooks/useBackButton';
 import { getDeepLinkCourseId } from '@/lib/deepLink';
 
 type Screen =
@@ -28,6 +29,10 @@ function AppContent() {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<TabKey>('home');
   const [screenStack, setScreenStack] = useState<Screen[]>([]);
+
+  // Telegram's back button (and Android's back key) returns to the previous
+  // screen instead of closing the app; it is hidden on the main tabs.
+  useBackButton(screenStack.length > 0 ? () => setScreenStack((s) => s.slice(0, -1)) : null);
 
   // Handle deep link on mount
   useEffect(() => {

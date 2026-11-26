@@ -5,6 +5,7 @@ import { LoadingScreen } from '@/components/Spinner';
 import { ErrorState } from '@/components/StateViews';
 import { AppHeader } from '@/components/AppHeader';
 import { LessonMedia } from '@/components/LessonMedia';
+import { LinkifiedText } from '@/components/LinkifiedText';
 import { useUser } from '@/hooks/useUser';
 import {
   fetchCourseById,
@@ -165,7 +166,9 @@ export function LessonPage({
         <div>
           <h1 dir="auto" className="text-2xl font-bold text-slate-900 text-left rtl:text-right">{currentLesson.title}</h1>
           {currentLesson.description && (
-            <p dir="auto" className="text-sm text-slate-500 mt-2 text-start">{currentLesson.description}</p>
+            <p dir="auto" className="text-sm text-slate-500 mt-2 text-start">
+              <LinkifiedText text={currentLesson.description} />
+            </p>
           )}
         </div>
 
@@ -200,13 +203,13 @@ export function LessonPage({
                 if (line.startsWith('- ') || line.startsWith('  ')) {
                   return (
                     <p key={i} dir="auto" className="text-slate-700 text-sm leading-relaxed ps-3 text-start">
-                      {line}
+                      <LinkifiedText text={line} />
                     </p>
                   );
                 }
                 return (
                   <p key={i} dir="auto" className="text-slate-700 text-sm leading-relaxed text-start">
-                    {line}
+                    <LinkifiedText text={line} />
                   </p>
                 );
               })}
@@ -269,7 +272,7 @@ export function LessonPage({
       </div>
 
       {/* Complete button — fixed bottom */}
-      <div className="fixed bottom-0 left-0 right-0 z-20 bg-white/90 backdrop-blur-md border-t border-slate-200/60 px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
+      <div className="fixed bottom-0 left-0 right-0 z-20 bg-surface/90 backdrop-blur-md border-t border-slate-200/60 px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
         <div className="max-w-lg mx-auto">
           {actionError && (
             <div role="alert" className="mb-2 text-center text-sm text-red-600">

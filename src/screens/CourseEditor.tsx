@@ -17,6 +17,7 @@ import {
 } from '@/lib/courseService';
 import { hapticFeedback, sanitizeUrl } from '@/lib/telegram';
 import { useI18n, type TKey } from '@/lib/i18n';
+import { useBackButton } from '@/hooks/useBackButton';
 import { errorMessage } from '@/lib/errors';
 import type { Course, ModuleWithLessons, Lesson, Resource, ResourceType } from '@/lib/types';
 
@@ -447,7 +448,7 @@ export function CourseEditor({
 
       {/* View tabs */}
       {course && (
-        <div className="flex border-b border-slate-200 bg-white px-4 gap-1">
+        <div className="flex border-b border-slate-200 bg-surface px-4 gap-1">
           <TabButton active={view === 'overview'} onClick={() => setView('overview')} label={t('editor.tab.overview')} />
           <TabButton active={view === 'modules'} onClick={() => setView('modules')} label={t('editor.tab.modules')} />
         </div>
@@ -760,6 +761,8 @@ function LessonEditorModal({
   onAddResource: (lessonId: string, resource: { title: string; type: ResourceType; url: string; description: string }) => Promise<unknown>;
   onDeleteResource: (resourceId: string) => Promise<void>;
 }) {
+  // Back closes this modal first, before leaving the editor.
+  useBackButton(onClose);
   const [title, setTitle] = useState(lesson?.title ?? '');
   const [description, setDescription] = useState(lesson?.description ?? '');
   const [content, setContent] = useState(lesson?.content ?? '');
@@ -814,11 +817,11 @@ function LessonEditorModal({
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center" onClick={onClose}>
       <div
-        className="bg-white w-full sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl"
+        className="bg-surface w-full sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between z-10">
+        <div className="sticky top-0 bg-surface border-b border-slate-100 px-4 py-3 flex items-center justify-between z-10">
           <h2 className="text-lg font-bold text-slate-900">
             {lesson ? t('editor.lesson.edit') : t('editor.lesson.new')}
           </h2>
@@ -949,7 +952,7 @@ function LessonEditorModal({
                 <div className="space-y-2">
                   {resources.map((res) => (
                     <div key={res.id} className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50">
-                      <div className="h-8 w-8 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
+                      <div className="h-8 w-8 rounded-lg bg-surface flex items-center justify-center flex-shrink-0">
                         <ResourceIcon type={res.type} />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -974,7 +977,7 @@ function LessonEditorModal({
         </div>
 
         {/* Save bar */}
-        <div className="sticky bottom-0 bg-white border-t border-slate-100 px-4 py-3">
+        <div className="sticky bottom-0 bg-surface border-t border-slate-100 px-4 py-3">
           <button
             onClick={handleSave}
             disabled={saving || !title.trim()}

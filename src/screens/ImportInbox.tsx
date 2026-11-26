@@ -177,7 +177,7 @@ export function ImportInbox({ onBack }: { onBack: () => void }) {
               <p className="text-xs text-blue-600 mt-0.5">{t('inbox.banner.body')}</p>
               <button
                 onClick={() => openTelegramLink(buildBotChatLink())}
-                className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-blue-600 text-xs font-semibold border border-blue-200 active:scale-95 transition-all"
+                className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface text-blue-600 text-xs font-semibold border border-blue-200 active:scale-95 transition-all"
               >
                 <Send className="h-3.5 w-3.5" />
                 {t('inbox.openBot')}
@@ -218,7 +218,7 @@ export function ImportInbox({ onBack }: { onBack: () => void }) {
                 id="import-course"
                 value={selectedCourse}
                 onChange={(e) => handleCourseChange(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-surface text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {courses.map((c) => (
                   <option key={c.id} value={c.id}>{c.title}</option>
@@ -233,7 +233,7 @@ export function ImportInbox({ onBack }: { onBack: () => void }) {
                 id="import-module"
                 value={selectedModule}
                 onChange={(e) => setSelectedModule(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-surface text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {availableModules.length === 0 && <option value="">{t('inbox.selectModule')}</option>}
                 {availableModules.map((m) => (

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { ArrowLeftRight, Info, Bell, Shield, Languages } from 'lucide-react';
+import { ArrowLeftRight, Info, Bell, Shield, Languages, Sun, Moon } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { useUser } from '@/hooks/useUser';
 import { isRunningInTelegram } from '@/lib/telegram';
 import { useI18n, type Lang } from '@/lib/i18n';
+import { useTheme, type ThemeMode } from '@/lib/theme';
 
 // Each language is shown in its own name, so it's recognizable whatever the current UI language.
 const LANGUAGES: Array<{ code: Lang; label: string }> = [
@@ -11,9 +12,45 @@ const LANGUAGES: Array<{ code: Lang; label: string }> = [
   { code: 'en', label: 'English' },
 ];
 
+const THEME_MODES: ThemeMode[] = ['auto', 'light', 'dark'];
+
+/** Small segmented control (radio group) used for the settings above. */
+function Segmented<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: T;
+  onChange: (value: T) => void;
+  options: Array<{ value: T; label: string }>;
+}) {
+  return (
+    <div className="flex rounded-xl bg-slate-100 p-1 flex-shrink-0" role="radiogroup" aria-label={label}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          role="radio"
+          aria-checked={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            value === option.value
+              ? 'bg-surface dark:bg-slate-200 text-blue-600 shadow-sm'
+              : 'text-slate-500'
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Profile() {
   const { user, toggleRole } = useUser();
   const { t, lang, setLang } = useI18n();
+  const { mode, theme, setMode } = useTheme();
   const [toggling, setToggling] = useState(false);
 
   const handleToggleRole = async () => {
@@ -68,28 +105,31 @@ export function Profile() {
         </button>
       </Card>
 
-      {/* Language */}
-      <Card className="p-4">
+      {/* Settings: language and appearance */}
+      <Card className="p-4 space-y-4">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
             <Languages className="h-5 w-5 text-blue-500" />
           </div>
           <p className="flex-1 text-sm font-semibold text-slate-900">{t('profile.language')}</p>
-          <div className="flex rounded-xl bg-slate-100 p-1" role="radiogroup" aria-label={t('profile.language')}>
-            {LANGUAGES.map((option) => (
-              <button
-                key={option.code}
-                role="radio"
-                aria-checked={lang === option.code}
-                onClick={() => setLang(option.code)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  lang === option.code ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
+          <Segmented
+            label={t('profile.language')}
+            value={lang}
+            onChange={setLang}
+            options={LANGUAGES.map((o) => ({ value: o.code, label: o.label }))}
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
+            {theme === 'dark' ? <Moon className="h-5 w-5 text-purple-500" /> : <Sun className="h-5 w-5 text-purple-500" />}
           </div>
+          <p className="flex-1 text-sm font-semibold text-slate-900">{t('profile.appearance')}</p>
+          <Segmented
+            label={t('profile.appearance')}
+            value={mode}
+            onChange={setMode}
+            options={THEME_MODES.map((m) => ({ value: m, label: t(`profile.theme.${m}`) }))}
+          />
         </div>
       </Card>
 

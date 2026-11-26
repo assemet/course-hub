@@ -67,6 +67,22 @@ Arabic switches the whole layout to RTL (`<html dir="rtl">`).
 To add or change text, add the key to **both** `en` and `ar`; TypeScript fails
 the build if a key is missing from the Arabic dictionary.
 
+## Theme (light / dark)
+
+By default the app follows Telegram's theme (and updates live when the user
+switches it); Profile → Appearance can force Light or Dark.
+
+Colors are CSS variables: `tailwind.config.js` maps the palette (`slate`,
+`blue`, ...) and `surface` (card background) to variables defined in
+`src/index.css`, and `.dark` on `<html>` swaps them. Use the normal classes
+(`bg-surface` for cards instead of `bg-white`); no `dark:` variants are needed.
+
+## Navigation
+
+Telegram's native back button (and Android's back key) is driven by
+`useBackButton()` in `src/hooks/useBackButton.ts`: screens and modals register
+a handler, the latest one wins, and the button hides on the main tabs.
+
 ## Importing from Telegram
 
 Creators forward channel posts to the bot; they land in the **Import Inbox**
