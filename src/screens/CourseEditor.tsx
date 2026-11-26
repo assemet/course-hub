@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Plus, ChevronDown, ChevronUp, Trash2, Edit2,
   Save, X, Globe, GlobeLock, FileText, Link as LinkIcon, Download, Send,
-  BookOpen,
+  BookOpen, ShieldCheck, ShieldOff,
 } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { LoadingScreen } from '@/components/Spinner';
@@ -179,6 +179,23 @@ export function CourseEditor({
       hapticFeedback('success');
     } catch (err) {
       setActionError(errorMessage(err, t('editor.statusFailed')));
+    }
+  };
+
+  // === Content protection ===
+  const handleToggleProtect = async () => {
+    if (!course) return;
+    try {
+      const next = !course.protect_content;
+      const { error: err } = await supabase
+        .from('courses')
+        .update({ protect_content: next })
+        .eq('id', course.id);
+      if (err) throw err;
+      setCourse({ ...course, protect_content: next });
+      hapticFeedback('success');
+    } catch (err) {
+      setActionError(errorMessage(err, t('editor.protectFailed')));
     }
   };
 
@@ -545,6 +562,46 @@ export function CourseEditor({
                         : t('editor.draftHint')}
                     </p>
                   </div>
+                </div>
+              </Card>
+            )}
+
+            {course && (
+              <Card className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    course.protect_content ? 'bg-blue-50' : 'bg-slate-100'
+                  }`}>
+                    {course.protect_content ? (
+                      <ShieldCheck className="h-5 w-5 text-blue-500" />
+                    ) : (
+                      <ShieldOff className="h-5 w-5 text-slate-400" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p id="protect-label" className="text-sm font-semibold text-slate-900">{t('editor.protect.title')}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {course.protect_content ? t('editor.protect.on') : t('editor.protect.off')}
+                    </p>
+                    {course.protect_content && (
+                      <p className="text-[11px] text-slate-400 mt-1.5">{t('editor.protect.note')}</p>
+                    )}
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={course.protect_content}
+                    aria-labelledby="protect-label"
+                    onClick={handleToggleProtect}
+                    className={`relative h-7 w-12 flex-shrink-0 rounded-full transition-colors ${
+                      course.protect_content ? 'bg-blue-500' : 'bg-slate-300'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                        course.protect_content ? 'start-6' : 'start-1'
+                      }`}
+                    />
+                  </button>
                 </div>
               </Card>
             )}

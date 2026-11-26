@@ -15,13 +15,14 @@
 // read it. Any future rule (e.g. paid lessons) applies here automatically.
 //
 // Required secrets: TELEGRAM_BOT_TOKEN, APP_JWT_SECRET (same as auth-telegram).
-import { createClient } from "npm:@supabase/supabase-js@2.57.4";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
 import { corsHeaders, json, signJwt, verifyInitData } from "../_shared/telegram.ts";
 
 type FileKind = "photo" | "video" | "video_note" | "animation" | "document" | "audio" | "voice";
 
 interface LessonMedia {
   title: string;
+  module_id: string;
   media_type: string | null;
   media_kind: FileKind | null;
   media_file_id: string | null;
@@ -44,6 +45,22 @@ const SEND_METHOD: Record<FileKind, [method: string, field: string]> = {
 const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024; // Bot API getFile limit
 
 type Action = "view" | "thumb" | "send";
+
+/**
+ * Whether the lesson's course protects its files. Read with the caller's own
+ * permissions (they can already see the lesson, so they can see its course).
+ * Fails closed: if the setting can't be read, the file is sent protected.
+ */
+async function courseProtectsContent(client: SupabaseClient, moduleId: string): Promise<boolean> {
+  const { data: mod } = await client.from("modules").select("course_id").eq("id", moduleId).maybeSingle();
+  if (!mod?.course_id) return true;
+  const { data: course } = await client
+    .from("courses")
+    .select("protect_content")
+    .eq("id", mod.course_id)
+    .maybeSingle();
+  return course?.protect_content !== false;
+}
 const ACTIONS: Action[] = ["view", "thumb", "send"];
 
 /** Streams a Telegram file (<= 20 MB) back as an image response. */
@@ -142,7 +159,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: lesson, error: lessonErr } = await asUser
       .from("lessons")
-      .select("title, media_type, media_kind, media_file_id, media_file_name, media_mime_type, media_thumb_file_id")
+      .select("title, module_id, media_type, media_kind, media_file_id, media_file_name, media_mime_type, media_thumb_file_id")
       .eq("id", lessonId)
       .maybeSingle<LessonMedia>();
     if (lessonErr) throw lessonErr;
@@ -155,7 +172,12 @@ Deno.serve(async (req: Request) => {
 
     if (action === "send") {
       const [method, field] = SEND_METHOD[lesson.media_kind];
-      const params: Record<string, unknown> = { chat_id: tgUser.id, [field]: lesson.media_file_id };
+      const params: Record<string, unknown> = {
+        chat_id: tgUser.id,
+        [field]: lesson.media_file_id,
+        // Like a channel with "Restrict Saving Content": no forwarding or saving.
+        protect_content: await courseProtectsContent(asUser, lesson.module_id),
+      };
       // Video notes cannot have captions; everything else gets the lesson title.
       if (lesson.media_kind !== "video_note") params.caption = lesson.title.slice(0, 1024);
 

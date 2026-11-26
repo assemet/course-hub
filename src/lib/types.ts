@@ -20,6 +20,8 @@ export interface Course {
   cover_url: string | null;
   status: CourseStatus;
   slug: string | null;
+  /** Bot sends this course's files with Telegram's protect_content (no forwarding/saving). */
+  protect_content: boolean;
   created_at: string;
   updated_at: string;
 }

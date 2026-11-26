@@ -108,6 +108,18 @@ student only gets files from lessons they can see. Deploy it with:
 supabase functions deploy lesson-media
 ```
 
+**Content protection.** Each course has *Prevent saving and forwarding* (on
+by default, Course editor → Overview). When on, the bot sends files with
+Telegram's `protect_content`, like a channel with "Restrict Saving Content":
+videos and photos can't be forwarded or saved. Telegram limitation: on Android,
+protected PDFs and audio can still be saved to the device. If the setting
+can't be read, files are sent protected.
+
+**Restricted channels.** Posts from a channel with "Restrict Saving Content"
+can't be forwarded, even by its owner. Either turn the restriction off for a
+moment, forward the posts to the bot, and turn it back on (the bot keeps its
+copies), or send the original files to the bot directly.
+
 **Thumbnails and durations.** Telegram sends a small preview with most files
 (a video frame, the first page of PDFs uploaded from Telegram apps, album art);
 the bot keeps it with the video/audio length. Lists (course page, Import

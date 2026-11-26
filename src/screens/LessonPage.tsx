@@ -173,7 +173,7 @@ export function LessonPage({
         </div>
 
         {/* Attached Telegram file (image inline, other files sent to the chat) */}
-        <LessonMedia key={currentLesson.id} lesson={currentLesson} />
+        <LessonMedia key={currentLesson.id} lesson={currentLesson} protect={course?.protect_content !== false} />
 
         {/* Telegram content link */}
         {currentLesson.telegram_url && (

@@ -119,7 +119,7 @@ function SendButton({ state, onSend, label }: { state: SendState; onSend: () => 
   );
 }
 
-function LessonImage({ lesson }: { lesson: Lesson }) {
+function LessonImage({ lesson, protect }: { lesson: Lesson; protect: boolean }) {
   const { t } = useI18n();
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -143,7 +143,7 @@ function LessonImage({ lesson }: { lesson: Lesson }) {
   }, [lesson.id]);
 
   // Too big or unavailable to show inline: offer it like any other file.
-  if (failed) return <LessonFile lesson={lesson} note={t('lessonMedia.imageFailed')} />;
+  if (failed) return <LessonFile lesson={lesson} protect={protect} note={t('lessonMedia.imageFailed')} />;
 
   return (
     <div>
@@ -151,25 +151,36 @@ function LessonImage({ lesson }: { lesson: Lesson }) {
         <img
           src={src}
           alt={lesson.title}
-          className="w-full rounded-2xl border border-slate-100 bg-slate-50"
+          // Protected courses: no long-press "save image" / drag-out. Screenshots
+          // can't be blocked from a web page, so this only removes the easy path.
+          draggable={!protect}
+          onContextMenu={protect ? (e) => e.preventDefault() : undefined}
+          className={`w-full rounded-2xl border border-slate-100 bg-slate-50 ${
+            protect ? 'select-none [-webkit-touch-callout:none]' : ''
+          }`}
         />
       ) : (
         <div className="w-full aspect-video rounded-2xl bg-slate-100 animate-pulse" />
       )}
-      <button
-        onClick={send}
-        disabled={state === 'sending'}
-        className="mt-2 flex items-center gap-1.5 text-xs font-medium text-blue-600 disabled:opacity-50"
-      >
-        <Send className="h-3.5 w-3.5 rtl:-scale-x-100" />
-        {state === 'sending' ? t('lessonMedia.sending') : t('lessonMedia.saveImage')}
-      </button>
-      <SendStatus state={state} />
+      {/* Sending an image to save it makes no sense when the course forbids saving. */}
+      {!protect && (
+        <>
+          <button
+            onClick={send}
+            disabled={state === 'sending'}
+            className="mt-2 flex items-center gap-1.5 text-xs font-medium text-blue-600 disabled:opacity-50"
+          >
+            <Send className="h-3.5 w-3.5 rtl:-scale-x-100" />
+            {state === 'sending' ? t('lessonMedia.sending') : t('lessonMedia.saveImage')}
+          </button>
+          <SendStatus state={state} />
+        </>
+      )}
     </div>
   );
 }
 
-function LessonFile({ lesson, note }: { lesson: Lesson; note?: string }) {
+function LessonFile({ lesson, protect, note }: { lesson: Lesson; protect: boolean; note?: string }) {
   const { t } = useI18n();
   const { state, send } = useSendToChat(lesson.id);
   const type = lesson.media_type ?? 'file';
@@ -227,7 +238,9 @@ function LessonFile({ lesson, note }: { lesson: Lesson; note?: string }) {
         </div>
       </div>
       {note && <p className="text-xs text-slate-400 mt-3">{note}</p>}
-      <p className="text-xs text-slate-500 mt-3 mb-3">{t('lessonMedia.hint')}</p>
+      <p className="text-xs text-slate-500 mt-3 mb-3">
+        {protect ? t('lessonMedia.hintProtected') : t('lessonMedia.hint')}
+      </p>
       <SendButton state={state} onSend={send} label={t('lessonMedia.sendToChat')} />
       <SendStatus state={state} />
     </Card>
@@ -235,7 +248,9 @@ function LessonFile({ lesson, note }: { lesson: Lesson; note?: string }) {
 }
 
 /** The Telegram file attached to a lesson, if any. */
-export function LessonMedia({ lesson }: { lesson: Lesson }) {
+export function LessonMedia({ lesson, protect }: { lesson: Lesson; protect: boolean }) {
   if (!lesson.media_file_id || !lesson.media_type) return null;
-  return lesson.media_type === 'image' ? <LessonImage lesson={lesson} /> : <LessonFile lesson={lesson} />;
+  return lesson.media_type === 'image'
+    ? <LessonImage lesson={lesson} protect={protect} />
+    : <LessonFile lesson={lesson} protect={protect} />;
 }
