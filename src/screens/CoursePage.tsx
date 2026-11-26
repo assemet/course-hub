@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ChevronDown, Check, BookOpen, FileText, Link as LinkIcon, Share2, Copy, Check as CheckIcon } from 'lucide-react';
+import { ChevronDown, Check, BookOpen, FileText, Link as LinkIcon, Share2, Copy, Check as CheckIcon, Play, Trophy } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { ProgressBar } from '@/components/ProgressBar';
 import { LoadingScreen } from '@/components/Spinner';
@@ -16,6 +16,8 @@ import {
   updateLastLesson,
   fetchCreatorName,
   getLessonState,
+  getAllLessonsOrdered,
+  pickNextLesson,
 } from '@/lib/courseService';
 import type { Course, ModuleWithLessons, LessonProgress, Enrollment } from '@/lib/types';
 import { buildCourseDeepLink } from '@/lib/deepLink';
@@ -211,6 +213,46 @@ export function CoursePage({
             </div>
             <ProgressBar percent={progress.progress_percent} />
           </div>
+
+          {/* The one obvious next step: start, continue, or celebrate. */}
+          {progress.total_lessons > 0 && (() => {
+            const allLessons = getAllLessonsOrdered(modules);
+            const finished = progress.completed_lessons >= progress.total_lessons;
+            if (finished) {
+              return (
+                <div className="mt-4 rounded-xl bg-green-50 border border-green-200 p-3 flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                    <Trophy className="h-5 w-5 text-white" />
+                  </div>
+                  <p className="flex-1 text-sm font-semibold text-green-700">{t('course.finished')}</p>
+                  <button
+                    onClick={() => handleLessonClick(allLessons[0].id)}
+                    className="text-xs font-semibold text-green-700 underline-offset-2 hover:underline flex-shrink-0"
+                  >
+                    {t('course.reviewFromStart')}
+                  </button>
+                </div>
+              );
+            }
+            const next = pickNextLesson(modules, completedSet, lastLessonId);
+            if (!next) return null;
+            const notStarted = progress.completed_lessons === 0 && !lastLessonId;
+            return (
+              <button
+                onClick={() => handleLessonClick(next.id)}
+                className="mt-4 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-[0.98] shadow-sm transition-all min-w-0"
+              >
+                <Play className="h-4 w-4 fill-white flex-shrink-0" />
+                {notStarted ? (
+                  t('course.start')
+                ) : (
+                  <span className="truncate">
+                    {t('course.continue')} <bdi>{next.title}</bdi>
+                  </span>
+                )}
+              </button>
+            );
+          })()}
         </Card>
 
         {/* Modules */}

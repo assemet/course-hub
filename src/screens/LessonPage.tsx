@@ -1,11 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Check, ChevronLeft, ChevronRight, FileText as FileIcon, Link as LinkIcon, Download, Send, CheckCircle2, ExternalLink } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, FileText as FileIcon, Link as LinkIcon, Download, Send, CheckCircle2, ExternalLink, ListOrdered } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { LoadingScreen } from '@/components/Spinner';
 import { ErrorState } from '@/components/StateViews';
 import { AppHeader } from '@/components/AppHeader';
 import { LessonMedia } from '@/components/LessonMedia';
 import { LinkifiedText } from '@/components/LinkifiedText';
+import { LessonListSheet } from '@/components/LessonListSheet';
+import { CourseCompleteDialog } from '@/components/CourseCompleteDialog';
 import { useUser } from '@/hooks/useUser';
 import {
   fetchCourseById,
@@ -58,6 +60,9 @@ export function LessonPage({
   const [marking, setMarking] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [completedSet, setCompletedSet] = useState<Set<string>>(new Set());
+  const [showList, setShowList] = useState(false);
+  const [showCourseComplete, setShowCourseComplete] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -91,8 +96,9 @@ export function LessonPage({
       }
       setCurrentLesson(lesson);
 
-      const progressEntry = lp.find((p) => p.lesson_id === lessonId);
-      setCompleted(progressEntry?.completed ?? false);
+      const done = new Set(lp.filter((p) => p.completed).map((p) => p.lesson_id));
+      setCompletedSet(done);
+      setCompleted(done.has(lessonId));
 
       await updateLastLesson(user.id, courseId, lessonId);
     } catch (err) {
@@ -110,6 +116,7 @@ export function LessonPage({
   const currentIndex = allLessons.findIndex((l) => l.id === lessonId);
   const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null;
   const nextLesson = currentIndex >= 0 && currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null;
+  const currentModule = modules.find((m) => m.lessons.some((l) => l.id === lessonId)) ?? null;
 
   const handleMarkComplete = async () => {
     if (!user || completed || marking) return;
@@ -118,9 +125,16 @@ export function LessonPage({
       setActionError(null);
       await markLessonComplete(user.id, courseId, lessonId);
       setCompleted(true);
-      setShowSuccess(true);
+      const done = new Set(completedSet).add(lessonId);
+      setCompletedSet(done);
       hapticFeedback('success');
-      setTimeout(() => setShowSuccess(false), 2500);
+      // This was the last unfinished lesson: celebrate the whole course.
+      if (allLessons.length > 0 && allLessons.every((l) => done.has(l.id))) {
+        setShowCourseComplete(true);
+      } else {
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 2500);
+      }
     } catch (err) {
       // Keep the lesson on screen; a failed save shouldn't throw the learner out of it.
       setActionError(errorMessage(err, t('lesson.markFailed')));
@@ -159,11 +173,37 @@ export function LessonPage({
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <AppHeader title={course?.title ?? t('lesson.title')} onBack={onBack} />
+      <AppHeader
+        title={course?.title ?? t('lesson.title')}
+        onBack={onBack}
+        rightAction={
+          <button
+            onClick={() => setShowList(true)}
+            aria-label={t('lesson.openList')}
+            className="flex items-center justify-center h-9 w-9 rounded-xl hover:bg-slate-100 active:scale-90 transition-all"
+          >
+            <ListOrdered className="h-5 w-5 text-slate-600" />
+          </button>
+        }
+      />
 
       <div className="px-4 py-5 space-y-5 pb-28">
         {/* Lesson title */}
         <div>
+          {currentIndex >= 0 && (
+            <button
+              onClick={() => setShowList(true)}
+              className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-blue-600 max-w-full"
+            >
+              <span className="flex-shrink-0">{t('lesson.position', { n: currentIndex + 1, total: allLessons.length })}</span>
+              {currentModule && (
+                <>
+                  <span aria-hidden="true" className="text-slate-300">·</span>
+                  <span dir="auto" className="truncate text-slate-500">{currentModule.title}</span>
+                </>
+              )}
+            </button>
+          )}
           <h1 dir="auto" className="text-2xl font-bold text-slate-900 text-left rtl:text-right">{currentLesson.title}</h1>
           {currentLesson.description && (
             <p dir="auto" className="text-sm text-slate-500 mt-2 text-start">
@@ -285,6 +325,24 @@ export function LessonPage({
               {nextLesson ? t('lesson.completedNext') : t('lesson.completedDone')}
             </div>
           )}
+          {completed && nextLesson ? (
+            // Done here: the natural next step is the next lesson.
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1 px-3 py-3.5 rounded-xl bg-green-50 text-green-600 border border-green-200 text-sm font-semibold flex-shrink-0">
+                <Check className="h-4 w-4" strokeWidth={3} />
+                {t('lesson.completed')}
+              </span>
+              <button
+                onClick={() => handleNavigate(nextLesson.id)}
+                className="flex-1 min-w-0 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-[0.98] shadow-sm transition-all"
+              >
+                <span className="truncate">
+                  {t('lesson.nextPrefix')} <bdi>{nextLesson.title}</bdi>
+                </span>
+                <ChevronRight className="h-4 w-4 flex-shrink-0 rtl:rotate-180" />
+              </button>
+            </div>
+          ) : (
           <button
             onClick={handleMarkComplete}
             disabled={completed || marking}
@@ -311,8 +369,35 @@ export function LessonPage({
               </>
             )}
           </button>
+          )}
         </div>
       </div>
+
+      {showList && (
+        <LessonListSheet
+          modules={modules}
+          completedSet={completedSet}
+          currentLessonId={lessonId}
+          onClose={() => setShowList(false)}
+          onSelect={(id) => {
+            setShowList(false);
+            handleNavigate(id);
+          }}
+        />
+      )}
+
+      {showCourseComplete && course && (
+        <CourseCompleteDialog
+          courseId={course.id}
+          courseTitle={course.title}
+          lessonCount={allLessons.length}
+          onClose={() => setShowCourseComplete(false)}
+          onBackToCourse={() => {
+            setShowCourseComplete(false);
+            onBack();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { BookOpen, ArrowRight } from 'lucide-react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { BookOpen, ArrowRight, Search, X } from 'lucide-react';
 import { Card } from '@/components/Card';
 import { ProgressBar } from '@/components/ProgressBar';
 import { LoadingScreen } from '@/components/Spinner';
@@ -15,6 +15,7 @@ import {
 } from '@/lib/courseService';
 import { useI18n } from '@/lib/i18n';
 import { errorMessage } from '@/lib/errors';
+import { matchesSearch } from '@/lib/search';
 import type { Course, CourseProgress } from '@/lib/types';
 
 export function CourseList({ onOpenCourse }: { onOpenCourse: (courseId: string) => void }) {
@@ -25,6 +26,7 @@ export function CourseList({ onOpenCourse }: { onOpenCourse: (courseId: string) 
   const [enrolledSet, setEnrolledSet] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -69,6 +71,11 @@ export function CourseList({ onOpenCourse }: { onOpenCourse: (courseId: string) 
     onOpenCourse(courseId);
   };
 
+  const visibleCourses = useMemo(
+    () => courses.filter((c) => matchesSearch(query, [c.title, c.description])),
+    [courses, query]
+  );
+
   if (loading) return <LoadingScreen message={t('courses.loading')} />;
   if (error) return <ErrorState message={error} onRetry={load} />;
 
@@ -79,15 +86,45 @@ export function CourseList({ onOpenCourse }: { onOpenCourse: (courseId: string) 
         <p className="text-sm text-slate-500 mt-1">{t('courses.subtitle')}</p>
       </div>
 
+      {/* Search: only useful once there are a few courses to look through. */}
+      {courses.length > 3 && (
+        <div className="relative">
+          <Search className="pointer-events-none absolute top-1/2 -translate-y-1/2 start-3.5 h-4 w-4 text-slate-400" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('courses.searchPh')}
+            aria-label={t('courses.searchPh')}
+            dir="auto"
+            enterKeyHint="search"
+            className="w-full ps-10 pe-10 py-3 rounded-xl border border-slate-200 bg-surface text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 [&::-webkit-search-cancel-button]:hidden"
+          />
+          {query && (
+            <button
+              onClick={() => setQuery('')}
+              aria-label={t('courses.clearSearch')}
+              className="absolute top-1/2 -translate-y-1/2 end-2 h-8 w-8 rounded-lg flex items-center justify-center hover:bg-slate-100"
+            >
+              <X className="h-4 w-4 text-slate-400" />
+            </button>
+          )}
+        </div>
+      )}
+
       {courses.length === 0 ? (
         <EmptyState
           title={t('courses.empty.title')}
           description={t('courses.empty.desc')}
           icon={<BookOpen className="h-7 w-7 text-slate-400" />}
         />
+      ) : visibleCourses.length === 0 ? (
+        <p className="text-sm text-slate-500 text-center py-10">
+          {t('courses.noResults', { q: query.trim() })}
+        </p>
       ) : (
         <div className="space-y-3">
-          {courses.map((course) => {
+          {visibleCourses.map((course) => {
             const progress = progressMap[course.id];
             const isEnrolled = enrolledSet.has(course.id);
             return (

@@ -15,6 +15,19 @@ export default {
   darkMode: 'class',
   theme: {
     extend: {
+      keyframes: {
+        'sheet-up': { from: { transform: 'translateY(100%)' }, to: { transform: 'translateY(0)' } },
+        'pop-in': { '0%': { opacity: '0', transform: 'scale(0.85)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
+        'confetti-fall': {
+          '0%': { transform: 'translateY(0) rotate(0deg)', opacity: '1' },
+          '100%': { transform: 'translateY(105vh) rotate(720deg)', opacity: '0.9' },
+        },
+      },
+      animation: {
+        'sheet-up': 'sheet-up 0.25s ease-out',
+        'pop-in': 'pop-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        'confetti-fall': 'confetti-fall 3s ease-in forwards',
+      },
       colors: {
         surface: 'rgb(var(--c-surface) / <alpha-value>)',
         slate: scale('slate'),

@@ -202,6 +202,15 @@ export async function findNextLesson(
   completedSet: Set<string>,
   lastLessonId: string | null
 ): Promise<Lesson | null> {
+  return pickNextLesson(modules, completedSet, lastLessonId);
+}
+
+/** The lesson a student should open next (synchronous; see findNextLesson). */
+export function pickNextLesson(
+  modules: ModuleWithLessons[],
+  completedSet: Set<string>,
+  lastLessonId: string | null
+): Lesson | null {
   const allLessons = getAllLessonsOrdered(modules);
   if (allLessons.length === 0) return null;
 

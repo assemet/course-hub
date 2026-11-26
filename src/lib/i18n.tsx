@@ -181,6 +181,9 @@ const en = {
   'courses.empty.title': 'No courses available',
   'courses.empty.desc': 'Check back later for new courses.',
   'courses.enroll': 'Enroll & start',
+  'courses.searchPh': 'Search courses...',
+  'courses.noResults': 'No courses match "{q}"',
+  'courses.clearSearch': 'Clear search',
 
   // student home
   'home.loading': 'Loading your courses...',
@@ -209,6 +212,10 @@ const en = {
   'course.shareLink': 'Share link: {link}',
   'course.copied': 'Copied!',
   'course.copyLink': 'Copy link',
+  'course.start': 'Start the course',
+  'course.continue': 'Continue:',
+  'course.finished': 'You finished this course 🎉',
+  'course.reviewFromStart': 'Review from the start',
 
   // lesson page
   'lesson.title': 'Lesson',
@@ -226,6 +233,21 @@ const en = {
   'lesson.completed': 'Completed',
   'lesson.saving': 'Saving...',
   'lesson.markComplete': 'Mark as Completed',
+  'lesson.position': 'Lesson {n} of {total}',
+  'lesson.openList': 'All lessons',
+  'lesson.nextPrefix': 'Next:',
+  'lesson.list.title': 'Course lessons',
+  'lesson.list.progress': '{done} of {total} completed',
+  'lesson.list.current': 'Current',
+
+  // course completion
+  'complete.title': 'Well done! 🎉',
+  'complete.bodyBefore': 'You finished',
+  'complete.bodyAfter': '.',
+  'complete.lessons': (v: Vars) => `${enPlural(num(v), 'lesson', 'lessons')} completed`,
+  'complete.share': 'Share your achievement',
+  'complete.shareText': 'I just finished the course "{course}" 🎉',
+  'complete.backToCourse': 'Back to the course',
 
   // profile
   'profile.role.student': 'Student',
@@ -474,6 +496,9 @@ const ar: Record<TKey, Entry> = {
   'courses.empty.title': 'لا توجد دورات متاحة',
   'courses.empty.desc': 'عد لاحقاً لاكتشاف دورات جديدة.',
   'courses.enroll': 'سجّل وابدأ',
+  'courses.searchPh': 'ابحث في الدورات...',
+  'courses.noResults': 'لا توجد دورات تطابق «{q}»',
+  'courses.clearSearch': 'مسح البحث',
 
   'home.loading': 'جارٍ تحميل دوراتك...',
   'home.loadFailed': 'تعذّر تحميل دوراتك',
@@ -500,6 +525,10 @@ const ar: Record<TKey, Entry> = {
   'course.shareLink': 'رابط المشاركة: {link}',
   'course.copied': 'تم النسخ!',
   'course.copyLink': 'نسخ الرابط',
+  'course.start': 'ابدأ الدورة',
+  'course.continue': 'متابعة:',
+  'course.finished': 'أنهيت هذه الدورة 🎉',
+  'course.reviewFromStart': 'المراجعة من البداية',
 
   'lesson.title': 'الدرس',
   'lesson.loading': 'جارٍ تحميل الدرس...',
@@ -516,6 +545,21 @@ const ar: Record<TKey, Entry> = {
   'lesson.completed': 'مكتمل',
   'lesson.saving': 'جارٍ الحفظ...',
   'lesson.markComplete': 'تحديد كمكتمل',
+  'lesson.position': 'الدرس {n} من {total}',
+  'lesson.openList': 'كل الدروس',
+  'lesson.nextPrefix': 'التالي:',
+  'lesson.list.title': 'دروس الدورة',
+  'lesson.list.progress': 'أنجزت {done} من {total}',
+  'lesson.list.current': 'الحالي',
+
+  'complete.title': 'أحسنت! 🎉',
+  'complete.bodyBefore': 'أنهيت دورة',
+  'complete.bodyAfter': 'كاملة.',
+  'complete.lessons': (v) =>
+    arPlural(num(v), { zero: 'لا دروس', one: 'درس واحد مكتمل', two: 'درسان مكتملان', few: '{n} دروس مكتملة', many: '{n} درسًا مكتملًا', other: '{n} درس مكتمل' }),
+  'complete.share': 'شارك إنجازك',
+  'complete.shareText': 'أنهيت دورة «{course}» 🎉',
+  'complete.backToCourse': 'العودة إلى الدورة',
 
   'profile.role.student': 'طالب',
   'profile.role.creator': 'صانع محتوى',

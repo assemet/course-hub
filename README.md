@@ -83,6 +83,20 @@ Telegram's native back button (and Android's back key) is driven by
 `useBackButton()` in `src/hooks/useBackButton.ts`: screens and modals register
 a handler, the latest one wins, and the button hides on the main tabs.
 
+## Student experience
+
+- **Course page**: one clear next step: *Start the course*, *Continue: <lesson>*
+  (resumes the last opened lesson, or the next unfinished one), or a
+  *You finished this course* banner with *Review from the start*.
+- **Lesson page**: "Lesson 3 of 12 · module" line and a list button open a
+  sheet with every lesson and its status, to jump anywhere. After completing a
+  lesson, the bottom bar becomes *Next: <title>*.
+- **Finishing a course** shows a celebration (CSS confetti, off when the device
+  asks for reduced motion) with *Share your achievement* (Telegram share link).
+- **Search** in Browse (shown from 4 courses) matches title and description,
+  ignoring Arabic spelling variants: hamza forms (أ/إ/آ → ا, ؤ/ئ → ء),
+  ة/ه, ى/ي, diacritics, tatweel and Arabic-Indic digits (`src/lib/search.ts`).
+
 ## Creator tools
 
 - **Students and progress** (Dashboard → a course → *Students and progress*):
