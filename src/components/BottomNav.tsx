@@ -32,7 +32,7 @@ export function BottomNav({ activeTab, onTabChange, role }: BottomNavProps) {
         ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-surface/90 backdrop-blur-md border-t border-slate-200/60 pb-[env(safe-area-inset-bottom)]">
+    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-surface/90 backdrop-blur-md border-t border-slate-200 pb-[env(safe-area-inset-bottom)]">
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto">
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -51,8 +51,8 @@ export function BottomNav({ activeTab, onTabChange, role }: BottomNavProps) {
                 strokeWidth={active ? 2.5 : 2}
               />
               <span
-                className={`text-[11px] font-medium transition-colors ${
-                  active ? 'text-blue-500' : 'text-slate-400'
+                className={`text-[11px] transition-colors ${
+                  active ? 'font-semibold text-blue-500' : 'font-medium text-slate-500'
                 }`}
               >
                 {tab.label}

@@ -279,7 +279,7 @@ export async function fetchCreatorName(creatorId: string): Promise<string> {
     .select('first_name, username')
     .eq('id', creatorId)
     .maybeSingle();
-  if (error || !data) return 'Unknown';
+  if (error || !data) return '';
   return (data as { first_name: string; username: string | null }).first_name;
 }
 
@@ -290,4 +290,54 @@ export async function countEnrollmentsForCourse(courseId: string): Promise<numbe
     .eq('course_id', courseId);
   if (error) throw error;
   return count ?? 0;
+}
+
+function localDay(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+/** Consecutive days, counted from a list of activity times (local dates). */
+export function countStreak(times: string[], now = new Date()): number {
+  const days = new Set(times.map((t) => localDay(new Date(t))));
+  const day = new Date(now);
+  // Today may not have activity yet; the streak still counts from yesterday.
+  if (!days.has(localDay(day))) day.setDate(day.getDate() - 1);
+  let streak = 0;
+  while (days.has(localDay(day))) {
+    streak++;
+    day.setDate(day.getDate() - 1);
+  }
+  return streak;
+}
+
+/**
+ * Days in a row the student studied: finished a lesson or reviewed flashcards.
+ * Best-effort (0 on any error): it only decorates the home screen.
+ */
+export async function fetchStudyStreak(userId: string): Promise<number> {
+  try {
+    const [lessons, reviews] = await Promise.all([
+      supabase
+        .from('lesson_progress')
+        .select('completed_at')
+        .eq('user_id', userId)
+        .eq('completed', true)
+        .not('completed_at', 'is', null)
+        .order('completed_at', { ascending: false })
+        .limit(200),
+      supabase
+        .from('flashcard_reviews')
+        .select('updated_at')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(200),
+    ]);
+    const times = [
+      ...((lessons.data ?? []) as Array<{ completed_at: string }>).map((r) => r.completed_at),
+      ...((reviews.data ?? []) as Array<{ updated_at: string }>).map((r) => r.updated_at),
+    ];
+    return countStreak(times);
+  } catch {
+    return 0;
+  }
 }

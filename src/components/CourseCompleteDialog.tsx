@@ -92,7 +92,7 @@ export function CourseCompleteDialog({
         {onGetCertificate && (
           <button
             onClick={onGetCertificate}
-            className="mt-6 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-500 text-white text-sm font-semibold active:scale-[0.98] transition-all"
+            className="mt-6 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-500 text-[#0B2463] text-sm font-semibold active:scale-[0.98] transition-all"
           >
             <Award className="h-4 w-4" />
             {t('complete.getCertificate')}

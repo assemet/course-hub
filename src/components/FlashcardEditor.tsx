@@ -42,7 +42,7 @@ function CardForm({
   };
 
   return (
-    <Card className="p-4 space-y-3 border-blue-300">
+    <Card className="p-4 space-y-3 border border-blue-300">
       <div>
         <label htmlFor="card-front" className="text-sm font-medium text-slate-700 block mb-1.5">{t('cardEditor.front')}</label>
         <textarea id="card-front" value={front} onChange={(e) => setFront(e.target.value)} rows={2} maxLength={500} dir="auto"
@@ -88,7 +88,7 @@ function BulkForm({ onSave, onCancel }: { onSave: (cards: Array<{ front: string;
   };
 
   return (
-    <Card className="p-4 space-y-3 border-blue-300">
+    <Card className="p-4 space-y-3 border border-blue-300">
       <div>
         <label htmlFor="bulk" className="text-sm font-medium text-slate-700 block mb-1">{t('cardEditor.bulkTitle')}</label>
         <p className="text-xs text-slate-500 mb-2">{t('cardEditor.bulkHint')}</p>

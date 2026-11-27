@@ -205,7 +205,7 @@ export function LessonPage({
           {blockingQuizModule && (
             <button
               onClick={() => onOpenQuiz(courseId, blockingQuizModule.id)}
-              className="mt-6 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-500 text-white text-sm font-semibold active:scale-[0.98] transition-all min-w-0"
+              className="mt-6 w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-amber-500 text-[#0B2463] text-sm font-semibold active:scale-[0.98] transition-all min-w-0"
             >
               <ClipboardList className="h-4 w-4 flex-shrink-0" />
               <span className="truncate">{t('course.takeQuiz')} <bdi>{blockingQuizModule.title}</bdi></span>
@@ -237,7 +237,7 @@ export function LessonPage({
   })();
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface">
       <AppHeader
         title={course?.title ?? t('lesson.title')}
         onBack={onBack}
@@ -252,7 +252,7 @@ export function LessonPage({
         }
       />
 
-      <div className="px-4 py-5 space-y-5 pb-28">
+      <div className="px-5 py-5 space-y-5 pb-28">
         {/* Lesson title */}
         <div>
           {currentIndex >= 0 && (
@@ -269,9 +269,9 @@ export function LessonPage({
               )}
             </button>
           )}
-          <h1 dir="auto" className="text-2xl font-bold text-slate-900 text-left rtl:text-right">{currentLesson.title}</h1>
+          <h1 dir="auto" className="text-[26px] font-bold leading-snug text-slate-900 text-left rtl:text-right">{currentLesson.title}</h1>
           {currentLesson.description && (
-            <p dir="auto" className="text-sm text-slate-500 mt-2 text-start">
+            <p dir="auto" className="text-[15px] leading-relaxed text-slate-500 mt-2 text-start">
               <LinkifiedText text={currentLesson.description} />
             </p>
           )}
@@ -282,7 +282,7 @@ export function LessonPage({
 
         {/* Telegram content link */}
         {currentLesson.telegram_url && (
-          <Card className="p-4 bg-blue-50 border-blue-200">
+          <Card className="p-4 bg-blue-50">
             <button
               onClick={() => openTelegramLink(currentLesson.telegram_url!)}
               className="flex items-center gap-3 w-full text-start"
@@ -301,25 +301,25 @@ export function LessonPage({
 
         {/* Lesson content */}
         {currentLesson.content && (
-          <Card className="p-5">
-            <div className="prose prose-sm max-w-none">
+          <div className="max-w-prose">
+            <div>
               {currentLesson.content.split('\n').map((line, i) => {
                 if (line.trim() === '') return <div key={i} className="h-3" />;
                 if (line.startsWith('- ') || line.startsWith('  ')) {
                   return (
-                    <p key={i} dir="auto" className="text-slate-700 text-sm leading-relaxed ps-3 text-start">
+                    <p key={i} dir="auto" className="text-slate-800 text-[17px] leading-[1.85] ps-3 text-start">
                       <LinkifiedText text={line} />
                     </p>
                   );
                 }
                 return (
-                  <p key={i} dir="auto" className="text-slate-700 text-sm leading-relaxed text-start">
+                  <p key={i} dir="auto" className="text-slate-800 text-[17px] leading-[1.85] text-start">
                     <LinkifiedText text={line} />
                   </p>
                 );
               })}
             </div>
-          </Card>
+          </div>
         )}
 
         {/* Resources */}
@@ -332,9 +332,9 @@ export function LessonPage({
               {resources.map((resource) => {
                 const Icon = resourceIcons[resource.type] ?? FileIcon;
                 return (
-                  <Card key={resource.id} className="p-3" onClick={() => handleResourceClick(resource)}>
+                  <Card key={resource.id} className="p-3 bg-slate-50 shadow-none" onClick={() => handleResourceClick(resource)}>
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                      <div className="h-10 w-10 rounded-xl bg-surface flex items-center justify-center flex-shrink-0">
                         <Icon className="h-5 w-5 text-slate-600" />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -355,12 +355,12 @@ export function LessonPage({
           </div>
         )}
 
-        {/* Navigation buttons */}
-        <div className="flex items-center gap-3">
+        {/* Previous / next: quiet, the bottom bar holds the main action. */}
+        <div className="flex items-center justify-between pt-2">
           <button
             onClick={() => prevLesson && handleNavigate(prevLesson.id)}
             disabled={!prevLesson}
-            className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl border border-slate-200 text-slate-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-slate-50 enabled:active:scale-95 transition-all"
+            className="flex items-center gap-1 h-11 px-2 -mx-2 rounded-xl text-slate-500 text-sm font-medium disabled:invisible enabled:active:bg-slate-100 transition-colors"
           >
             <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
             {t('lesson.prev')}
@@ -368,7 +368,7 @@ export function LessonPage({
           <button
             onClick={() => nextLesson && handleNavigate(nextLesson.id)}
             disabled={!nextLesson}
-            className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl border border-slate-200 text-slate-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-slate-50 enabled:active:scale-95 transition-all"
+            className="flex items-center gap-1 h-11 px-2 -mx-2 rounded-xl text-slate-500 text-sm font-medium disabled:invisible enabled:active:bg-slate-100 transition-colors"
           >
             {t('lesson.next')}
             <ChevronRight className="h-4 w-4 rtl:rotate-180" />
@@ -393,14 +393,14 @@ export function LessonPage({
           {nextAction ? (
             // Done here: offer the natural next step.
             <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1 px-3 py-3.5 rounded-xl bg-green-50 text-green-600 border border-green-200 text-sm font-semibold flex-shrink-0">
+              <span className="flex items-center gap-1 px-3 py-3.5 rounded-2xl bg-green-50 text-green-600 border border-green-200 text-sm font-semibold flex-shrink-0">
                 <Check className="h-4 w-4" strokeWidth={3} />
                 {t('lesson.completed')}
               </span>
               {nextAction.kind === 'lesson' && (
                 <button
                   onClick={() => handleNavigate(nextAction.lesson.id)}
-                  className="flex-1 min-w-0 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-[0.98] shadow-sm transition-all"
+                  className="flex-1 min-w-0 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-[0.98] shadow-sm transition-all"
                 >
                   <span className="truncate">
                     {t('lesson.nextPrefix')} <bdi>{nextAction.lesson.title}</bdi>
@@ -411,7 +411,7 @@ export function LessonPage({
               {nextAction.kind === 'quiz' && (
                 <button
                   onClick={() => onOpenQuiz(courseId, nextAction.moduleId)}
-                  className="flex-1 min-w-0 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-500 text-white text-sm font-semibold active:scale-[0.98] shadow-sm transition-all"
+                  className="flex-1 min-w-0 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-amber-500 text-[#0B2463] text-sm font-semibold active:scale-[0.98] shadow-sm transition-all"
                 >
                   <ClipboardList className="h-4 w-4 flex-shrink-0" />
                   <span className="truncate">{t('quiz.takeModuleQuiz')}</span>
@@ -420,7 +420,7 @@ export function LessonPage({
               {nextAction.kind === 'certificate' && (
                 <button
                   onClick={() => onOpenCertificate(courseId)}
-                  className="flex-1 min-w-0 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-amber-500 text-white text-sm font-semibold active:scale-[0.98] shadow-sm transition-all"
+                  className="flex-1 min-w-0 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-amber-500 text-[#0B2463] text-sm font-semibold active:scale-[0.98] shadow-sm transition-all"
                 >
                   <span className="truncate">{t('complete.getCertificate')}</span>
                 </button>
@@ -430,7 +430,7 @@ export function LessonPage({
           <button
             onClick={handleMarkComplete}
             disabled={completed || marking}
-            className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm transition-all ${
+            className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold text-sm transition-all ${
               completed
                 ? 'bg-green-50 text-green-600 border border-green-200'
                 : 'bg-blue-500 text-white hover:bg-blue-600 active:scale-[0.98] shadow-sm'

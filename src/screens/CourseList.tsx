@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { BookOpen, ArrowRight, Search, X } from 'lucide-react';
 import { Card } from '@/components/Card';
+import { CourseCover } from '@/components/CourseCover';
 import { ProgressBar } from '@/components/ProgressBar';
 import { LoadingScreen } from '@/components/Spinner';
 import { ErrorState, EmptyState } from '@/components/StateViews';
@@ -98,7 +99,7 @@ export function CourseList({ onOpenCourse }: { onOpenCourse: (courseId: string) 
             aria-label={t('courses.searchPh')}
             dir="auto"
             enterKeyHint="search"
-            className="w-full ps-10 pe-10 py-3 rounded-xl border border-slate-200 bg-surface text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 [&::-webkit-search-cancel-button]:hidden"
+            className="w-full ps-10 pe-10 py-3 rounded-2xl border border-slate-200 bg-surface text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 [&::-webkit-search-cancel-button]:hidden"
           />
           {query && (
             <button
@@ -129,24 +130,11 @@ export function CourseList({ onOpenCourse }: { onOpenCourse: (courseId: string) 
             const isEnrolled = enrolledSet.has(course.id);
             return (
               <Card key={course.id} className="overflow-hidden" onClick={() => handleOpen(course.id)}>
-                {course.cover_url && (
-                  <div className="h-32 bg-slate-100 overflow-hidden">
-                    <img
-                      src={course.cover_url}
-                      alt={course.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                )}
+                <CourseCover course={course} className="h-28" initialsClassName="text-3xl" />
                 <div className="p-4">
                   <div className="flex items-start gap-3">
-                    {!course.cover_url && (
-                      <div className="h-12 w-12 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-                        <BookOpen className="h-6 w-6 text-blue-500" />
-                      </div>
-                    )}
                     <div className="flex-1 min-w-0">
-                      <h3 dir="auto" className="font-semibold text-slate-900 text-left rtl:text-right">{course.title}</h3>
+                      <h3 dir="auto" className="text-base font-bold text-slate-900 text-left rtl:text-right">{course.title}</h3>
                       <p className="text-sm text-slate-500 mt-1 line-clamp-2">
                         {course.description ?? t('common.noDescription')}
                       </p>

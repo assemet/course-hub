@@ -67,6 +67,19 @@ Arabic switches the whole layout to RTL (`<html dir="rtl">`).
 To add or change text, add the key to **both** `en` and `ar`; TypeScript fails
 the build if a key is missing from the Arabic dictionary.
 
+## Look and feel
+
+Colors come from the logo: navy text on warm neutrals, brand blue for actions,
+gold for progress and nudges, violet for flashcards (`src/index.css`, same
+class names in light and dark). Text uses IBM Plex Sans Arabic. Courses without
+a cover image get a generated one (`src/components/CourseCover.tsx`): colors and
+shapes picked from the course id, plus its initials.
+
+- Student home: continue card with a progress ring, study streak (days in a row
+  with a finished lesson or a flashcard review), flashcards due.
+- Creator dashboard: students, active this week, share who finished, and a
+  nudge when students have been inactive for 3+ days.
+
 ## Splash screen
 
 `index.html` shows the logo (`public/logo.webp`) with a short intro animation

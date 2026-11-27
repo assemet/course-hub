@@ -193,6 +193,7 @@ function AppContent() {
           <StudentHome
             onOpenCourse={(courseId) => pushScreen({ name: 'course', courseId })}
             onOpenLesson={(courseId, lessonId) => pushScreen({ name: 'lesson', courseId, lessonId })}
+            onOpenFlashcards={(courseId, moduleId) => pushScreen({ name: 'flashcards', courseId, moduleId })}
           />
         )}
         {effectiveTab === 'courses' && (

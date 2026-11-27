@@ -65,7 +65,7 @@ function QuestionForm({
   };
 
   return (
-    <Card className="p-4 space-y-4 border-blue-300">
+    <Card className="p-4 space-y-4 border border-blue-300">
       <div>
         <label htmlFor="q-text" className="text-sm font-medium text-slate-700 block mb-1.5">{t('quizEditor.question')}</label>
         <textarea

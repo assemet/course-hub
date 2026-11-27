@@ -49,7 +49,7 @@ export function VerifyCertificateScreen({ code, onBack }: { code: string; onBack
       <AppHeader title={t('cert.verifyTitle')} onBack={onBack} />
       <div className="px-4 py-8">
         {cert ? (
-          <Card className="p-6 text-center border-green-300">
+          <Card className="p-6 text-center border border-green-300">
             <div className="mx-auto h-16 w-16 rounded-full bg-green-500 flex items-center justify-center">
               <ShieldCheck className="h-8 w-8 text-white" />
             </div>
@@ -71,7 +71,7 @@ export function VerifyCertificateScreen({ code, onBack }: { code: string; onBack
             <p dir="ltr" className="mt-4 font-mono text-sm text-slate-500">{formatCertificateCode(cert.code)}</p>
           </Card>
         ) : (
-          <Card className="p-6 text-center border-red-300">
+          <Card className="p-6 text-center border border-red-300">
             <div className="mx-auto h-16 w-16 rounded-full bg-red-500 flex items-center justify-center">
               <ShieldX className="h-8 w-8 text-white" />
             </div>

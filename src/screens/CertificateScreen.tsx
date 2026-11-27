@@ -155,7 +155,7 @@ export function CertificateScreen({ courseId, onBack }: { courseId: string; onBa
             <button
               onClick={handleIssue}
               disabled={issuing || name.trim().length < 2}
-              className="mt-5 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-amber-500 text-white text-sm font-semibold disabled:opacity-50 active:scale-[0.98] transition-all"
+              className="mt-5 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-amber-500 text-[#0B2463] text-sm font-semibold disabled:opacity-50 active:scale-[0.98] transition-all"
             >
               <Award className="h-4 w-4" />
               {issuing ? t('cert.issuing') : t('cert.issue')}

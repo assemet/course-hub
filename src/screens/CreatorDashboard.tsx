@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, BookOpen, Users, Edit, Globe, GlobeLock, ArrowRight, FileText, Inbox } from 'lucide-react';
+import { Plus, BookOpen, Users, Edit, Globe, GlobeLock, ArrowRight, FileText, Inbox, TrendingDown } from 'lucide-react';
+import { CourseCover } from '@/components/CourseCover';
+import { fetchCourseStudents, isInactive, type CourseStudent } from '@/lib/insightsService';
 import { Card } from '@/components/Card';
 import { LoadingScreen } from '@/components/Spinner';
 import { ErrorState, EmptyState } from '@/components/StateViews';
@@ -18,6 +20,47 @@ interface CourseStats {
   moduleCount: number;
   lessonCount: number;
   studentCount: number;
+  /** null when the student list couldn't be loaded (the numbers above still show). */
+  students: CourseStudent[] | null;
+}
+
+const WEEK = 7 * 24 * 3_600_000;
+
+/** Totals across all courses, for the numbers at the top of the dashboard. */
+function summarize(courses: Course[], stats: Record<string, CourseStats>) {
+  const students = new Set<string>();
+  const activeThisWeek = new Set<string>();
+  let enrollments = 0;
+  let finished = 0;
+  const inactive = new Set<string>();
+  let mostInactive: { courseId: string; count: number } | null = null;
+  const now = Date.now();
+  for (const course of courses) {
+    const s = stats[course.id];
+    if (!s?.students) continue;
+    let courseInactive = 0;
+    for (const st of s.students) {
+      students.add(st.user_id);
+      enrollments++;
+      if (now - new Date(st.last_activity_at).getTime() < WEEK) activeThisWeek.add(st.user_id);
+      const done = s.lessonCount > 0 && st.completed_lessons >= s.lessonCount;
+      if (done) finished++;
+      else if (isInactive(st, now)) {
+        courseInactive++;
+        inactive.add(st.user_id);
+      }
+    }
+    if (courseInactive > 0 && (!mostInactive || courseInactive > mostInactive.count)) {
+      mostInactive = { courseId: course.id, count: courseInactive };
+    }
+  }
+  return {
+    students: students.size,
+    activeThisWeek: activeThisWeek.size,
+    completionRate: enrollments > 0 ? Math.round((finished / enrollments) * 100) : 0,
+    inactive: inactive.size,
+    mostInactiveCourseId: mostInactive?.courseId ?? null,
+  };
 }
 
 export function CreatorDashboard({
@@ -54,12 +97,14 @@ export function CreatorDashboard({
 
       const entries = await Promise.all(
         myCourses.map(async (course) => {
-          const [modules, studentCount] = await Promise.all([
+          const [modules, students] = await Promise.all([
             fetchModulesWithLessons(course.id),
-            countEnrollmentsForCourse(course.id),
+            fetchCourseStudents(course.id).catch(() => null),
           ]);
+          // Fall back to a plain count if the student list is unavailable.
+          const studentCount = students ? students.length : await countEnrollmentsForCourse(course.id);
           const lessonCount = modules.reduce((sum, m) => sum + m.lessons.length, 0);
-          return [course.id, { moduleCount: modules.length, lessonCount, studentCount }] as const;
+          return [course.id, { moduleCount: modules.length, lessonCount, studentCount, students }] as const;
         })
       );
       const statsMap: Record<string, CourseStats> = Object.fromEntries(entries);
@@ -78,21 +123,59 @@ export function CreatorDashboard({
   if (loading) return <LoadingScreen message={t('dash.loading')} />;
   if (error) return <ErrorState message={error} onRetry={load} />;
 
+  const totals = summarize(courses, stats);
+  const hasStudentData = courses.some((c) => stats[c.id]?.students);
+
   return (
     <div className="px-4 py-5 space-y-5">
       <div className="flex items-center justify-between">
         <div>
+          <p dir="auto" className="text-sm text-slate-500 text-start">{t('dash.hello', { name: user?.first_name ?? '' })}</p>
           <h1 className="text-2xl font-bold text-slate-900">{t('dash.title')}</h1>
-          <p className="text-sm text-slate-500 mt-1">{t('dash.subtitle')}</p>
         </div>
         <button
           onClick={onCreateCourse}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-95 transition-all shadow-sm"
+          className="flex items-center gap-1.5 h-11 px-4 rounded-2xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-95 transition-all shadow-sm"
         >
           <Plus className="h-5 w-5" />
           {t('dash.create')}
         </button>
       </div>
+
+      {courses.length > 0 && hasStudentData && (
+        <div className="grid grid-cols-3 gap-2.5">
+          <div className="rounded-[18px] bg-[#0B2463] dark:bg-[#172B63] px-3 py-3.5 text-white">
+            <p className="text-2xl font-bold tabular-nums">{totals.students}</p>
+            <p className="text-xs text-[#C6D2EE]">{t('dash.kpi.students', { n: totals.students })}</p>
+          </div>
+          <div className="rounded-[18px] bg-surface px-3 py-3.5 shadow-[0_1px_3px_rgba(11,36,99,0.06)]">
+            <p className="text-2xl font-bold tabular-nums text-slate-900">{totals.activeThisWeek}</p>
+            <p className="text-xs text-slate-500">{t('dash.kpi.active')}</p>
+          </div>
+          <div className="rounded-[18px] bg-surface px-3 py-3.5 shadow-[0_1px_3px_rgba(11,36,99,0.06)]">
+            <p className="text-2xl font-bold tabular-nums text-slate-900">{totals.completionRate}%</p>
+            <p className="text-xs text-slate-500">{t('dash.kpi.completion')}</p>
+          </div>
+        </div>
+      )}
+
+      {totals.inactive > 0 && totals.mostInactiveCourseId && (
+        <div className="flex items-center gap-3 rounded-[20px] bg-amber-100 p-3.5">
+          <div className="h-10 w-10 rounded-xl bg-amber-500 flex items-center justify-center flex-shrink-0">
+            <TrendingDown className="h-5 w-5 text-[#0B2463]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-900">{t('dash.inactive.title', { n: totals.inactive })}</p>
+            <p className="text-xs text-amber-800">{t('dash.inactive.desc')}</p>
+          </div>
+          <button
+            onClick={() => onOpenStudents(totals.mostInactiveCourseId!)}
+            className="h-10 px-3 rounded-xl bg-surface text-sm font-semibold text-amber-900 flex-shrink-0 active:scale-95 transition-transform"
+          >
+            {t('dash.inactive.action')}
+          </button>
+        </div>
+      )}
 
       <Card className="p-4" onClick={onOpenImports}>
         <div className="flex items-center gap-3">
@@ -135,9 +218,7 @@ export function CreatorDashboard({
             return (
               <Card key={course.id} className="p-4" onClick={() => onEditCourse(course.id)}>
                 <div className="flex items-start gap-3">
-                  <div className="h-12 w-12 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
-                    <BookOpen className="h-6 w-6 text-slate-500" />
-                  </div>
+                  <CourseCover course={course} className="h-16 w-16 rounded-[14px] flex-shrink-0" initialsClassName="text-lg" />
                   <div className="flex-1 min-w-0">
                     <h3 dir="auto" className="font-semibold text-slate-900 truncate text-left rtl:text-right">{course.title}</h3>
                     <p className="text-sm text-slate-500 mt-0.5 line-clamp-1">
@@ -161,8 +242,8 @@ export function CreatorDashboard({
                       <span
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
                           isPublished
-                            ? 'bg-green-50 text-green-600'
-                            : 'bg-amber-50 text-amber-600'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-amber-100 text-amber-900'
                         }`}
                       >
                         {isPublished ? (

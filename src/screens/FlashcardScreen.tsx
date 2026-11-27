@@ -135,7 +135,7 @@ export function FlashcardScreen({
       <AppHeader title={course?.title ?? t('cards.title')} onBack={onBack} />
       <div className="px-4 py-5 space-y-4">
         <div className="flex items-center gap-2">
-          <Layers className="h-4 w-4 text-teal-600 flex-shrink-0" />
+          <Layers className="h-4 w-4 text-purple-600 flex-shrink-0" />
           <p className="text-sm font-semibold text-slate-700">{t('cards.title')}</p>
           <span aria-hidden="true" className="text-slate-300">·</span>
           <p dir="auto" className="text-sm text-slate-500 truncate">{deckTitle}</p>
@@ -156,7 +156,7 @@ export function FlashcardScreen({
                 </span>
               </div>
               <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
-                <div className="h-full bg-teal-500 transition-all" style={{ width: `${(index / queue.length) * 100}%` }} />
+                <div className="h-full bg-purple-500 transition-all" style={{ width: `${(index / queue.length) * 100}%` }} />
               </div>
             </div>
 
@@ -179,8 +179,8 @@ export function FlashcardScreen({
                     <RotateCcw className="h-3 w-3" /> {t('cards.tapToFlip')}
                   </span>
                 </div>
-                <div className="absolute inset-0 [backface-visibility:hidden] [transform:rotateY(180deg)] rounded-3xl bg-teal-50 border border-teal-200 shadow-md flex flex-col items-center justify-center p-6">
-                  <span className="absolute top-4 start-4 text-[11px] font-semibold text-teal-600">{t('cards.back')}</span>
+                <div className="absolute inset-0 [backface-visibility:hidden] [transform:rotateY(180deg)] rounded-3xl bg-purple-50 border border-purple-200 shadow-md flex flex-col items-center justify-center p-6">
+                  <span className="absolute top-4 start-4 text-[11px] font-semibold text-purple-600">{t('cards.back')}</span>
                   <p dir="auto" className="text-xl font-semibold text-slate-800 text-center whitespace-pre-wrap break-words">{current.back}</p>
                 </div>
               </div>
@@ -204,7 +204,7 @@ export function FlashcardScreen({
             ) : (
               <button
                 onClick={() => setFlipped(true)}
-                className="w-full py-3.5 rounded-xl bg-teal-500 text-white text-sm font-semibold active:scale-[0.98] transition-all"
+                className="w-full py-3.5 rounded-xl bg-purple-500 text-white text-sm font-semibold active:scale-[0.98] transition-all"
               >
                 {t('cards.showAnswer')}
               </button>
@@ -214,7 +214,7 @@ export function FlashcardScreen({
 
         {(phase === 'done' || phase === 'nothing-due') && (
           <Card className="p-6 text-center">
-            <div className={`mx-auto h-16 w-16 rounded-full flex items-center justify-center ${phase === 'done' ? 'bg-teal-500' : 'bg-slate-100'}`}>
+            <div className={`mx-auto h-16 w-16 rounded-full flex items-center justify-center ${phase === 'done' ? 'bg-purple-500' : 'bg-slate-100'}`}>
               {phase === 'done' ? <PartyPopper className="h-8 w-8 text-white" /> : <Layers className="h-8 w-8 text-slate-400" />}
             </div>
             <h1 className="mt-4 text-lg font-bold text-slate-900">
@@ -232,7 +232,7 @@ export function FlashcardScreen({
               {cards.length > 0 && (
                 <button
                   onClick={() => start(true, cards, reviews, modules)}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-teal-500 text-white text-sm font-semibold active:scale-[0.98] transition-all"
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-purple-500 text-white text-sm font-semibold active:scale-[0.98] transition-all"
                 >
                   <Repeat className="h-4 w-4" /> {t('cards.practiceAll', { n: cards.length })}
                 </button>

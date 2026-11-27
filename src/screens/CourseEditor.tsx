@@ -861,7 +861,7 @@ export function CourseEditor({
                           </button>
                           <button
                             onClick={() => setEditingCards({ moduleId: module.id, title: module.title })}
-                            className="w-full flex items-center gap-2 py-2 px-2 rounded-lg text-teal-600 text-sm font-medium hover:bg-teal-50 transition-colors"
+                            className="w-full flex items-center gap-2 py-2 px-2 rounded-lg text-purple-600 text-sm font-medium hover:bg-purple-50 transition-colors"
                           >
                             <Layers className="h-4 w-4" />
                             <span className="flex-1 text-start">{t('editor.flashcards')}</span>

@@ -186,7 +186,7 @@ export function ImportInbox({ onBack }: { onBack: () => void }) {
 
       <div className="px-4 py-5 space-y-5 pb-24">
         {/* Info banner */}
-        <Card className="p-4 bg-blue-50 border-blue-200">
+        <Card className="p-4 bg-blue-50">
           <div className="flex items-start gap-3">
             <div className="h-10 w-10 rounded-xl bg-blue-500 flex items-center justify-center flex-shrink-0">
               <Inbox className="h-5 w-5 text-white" />

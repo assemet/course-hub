@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ChevronDown, Check, BookOpen, FileText, Link as LinkIcon, Share2, Copy, Check as CheckIcon, Play, Trophy, Lock, ClipboardList, Award, Layers } from 'lucide-react';
+import { ChevronDown, Check, BookOpen, FileText, Share2, Check as CheckIcon, Play, Trophy, Lock, ClipboardList, Award, Layers } from 'lucide-react';
+import { CourseCover } from '@/components/CourseCover';
+import { isRunningInTelegram, openTelegramLink } from '@/lib/telegram';
 import { Card } from '@/components/Card';
 import { ProgressBar } from '@/components/ProgressBar';
 import { LoadingScreen } from '@/components/Spinner';
@@ -139,9 +141,14 @@ export function CoursePage({
     onOpenLesson(courseId, lessonId);
   };
 
-  const handleCopyLink = () => {
+  const handleShare = () => {
     if (!course) return;
     const link = buildCourseDeepLink(course.id);
+    // Inside Telegram: the native "share to chat" picker.
+    if (isRunningInTelegram()) {
+      openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(course.title)}`);
+      return;
+    }
     navigator.clipboard
       ?.writeText(link)
       .then(() => {
@@ -211,7 +218,7 @@ export function CoursePage({
         onBack={onBack}
         rightAction={
           <button
-            onClick={handleCopyLink}
+            onClick={handleShare}
             className="flex items-center justify-center h-9 w-9 rounded-xl hover:bg-slate-100 active:scale-90 transition-all"
             aria-label={t('course.share')}
           >
@@ -225,21 +232,21 @@ export function CoursePage({
       />
 
       <div className="px-4 py-5 space-y-5">
-        {/* Course header */}
+        {/* Cover with the title on it */}
+        <CourseCover course={course} heroTitle className="h-44 rounded-3xl" />
+
         <Card className="p-5">
-          {course.cover_url && (
-            <div className="h-40 -mx-5 -mt-5 mb-4 rounded-t-2xl bg-slate-100 overflow-hidden">
-              <img src={course.cover_url} alt={course.title} className="w-full h-full object-cover" />
+          {course.description && (
+            <p dir="auto" className="text-[15px] leading-relaxed text-slate-600 text-start">{course.description}</p>
+          )}
+          {creatorName && (
+            <div className={`${course.description ? 'mt-3' : ''} flex items-center gap-2.5 text-sm`}>
+              <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center text-sm font-bold text-amber-800">
+                {Array.from(creatorName)[0]?.toUpperCase()}
+              </div>
+              <span dir="auto" className="font-semibold text-slate-800">{creatorName}</span>
             </div>
           )}
-          <h1 dir="auto" className="text-xl font-bold text-slate-900 text-left rtl:text-right">{course.title}</h1>
-          <p dir="auto" className="text-sm text-slate-600 mt-2 text-start">{course.description}</p>
-          <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
-            <div className="h-7 w-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
-              {creatorName.charAt(0).toUpperCase()}
-            </div>
-            <span>{t('course.by', { name: creatorName })}</span>
-          </div>
           <div className="mt-4 flex items-center gap-4 text-sm">
             <div className="flex items-center gap-1.5 text-slate-500">
               <BookOpen className="h-4 w-4" />
@@ -270,7 +277,7 @@ export function CoursePage({
               {enrollment && (
                 <button
                   onClick={() => onOpenCertificate(courseId)}
-                  className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-500 text-white text-sm font-semibold active:scale-[0.98] transition-all"
+                  className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-500 text-[#0B2463] text-sm font-semibold active:scale-[0.98] transition-all"
                 >
                   <Award className="h-4 w-4" />
                   {t('course.certificate')}
@@ -287,7 +294,7 @@ export function CoursePage({
           {nextStep?.kind === 'quiz' && (
             <button
               onClick={() => onOpenQuiz(courseId, nextStep.module.id)}
-              className="mt-4 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-500 text-white text-sm font-semibold active:scale-[0.98] shadow-sm transition-all min-w-0"
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-amber-500 text-[#0B2463] text-sm font-semibold active:scale-[0.98] shadow-sm transition-all min-w-0"
             >
               <ClipboardList className="h-4 w-4 flex-shrink-0" />
               <span className="truncate">
@@ -304,7 +311,7 @@ export function CoursePage({
             return (
               <button
                 onClick={() => onOpenFlashcards(courseId, null)}
-                className="mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-teal-200 bg-teal-50 text-teal-700 text-sm font-semibold active:scale-[0.98] transition-all"
+                className="mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-purple-100 text-purple-700 text-sm font-semibold active:scale-[0.98] transition-all"
               >
                 <Layers className="h-4 w-4" />
                 {due > 0 ? t('cards.reviewDue', { n: due }) : t('cards.reviewAll')}
@@ -376,7 +383,11 @@ export function CoursePage({
                               key={lesson.id}
                               onClick={() => handleLessonClick(lesson.id)}
                               disabled={isLocked}
-                              className="w-full flex items-center gap-3 px-4 py-3 text-start enabled:hover:bg-slate-50 enabled:active:bg-slate-100 disabled:opacity-50 transition-colors"
+                              className={`w-full flex items-center gap-3 px-4 py-3 text-start disabled:opacity-50 transition-colors ${
+                                state === 'in_progress' && !isLocked
+                                  ? 'bg-blue-50'
+                                  : 'enabled:hover:bg-slate-50 enabled:active:bg-slate-100'
+                              }`}
                             >
                               <div className="flex-shrink-0">
                                 {isLocked ? (
@@ -401,7 +412,7 @@ export function CoursePage({
                                 <p
                                   dir="auto"
                                   className={`text-sm font-medium truncate text-left rtl:text-right ${
-                                    state === 'completed' ? 'text-slate-400 line-through' : 'text-slate-800'
+                                    state === 'completed' ? 'text-slate-500' : state === 'in_progress' ? 'text-slate-900 font-semibold' : 'text-slate-800'
                                   }`}
                                 >
                                   {lesson.title}
@@ -431,7 +442,11 @@ export function CoursePage({
                                   iconClassName="h-5 w-5"
                                 />
                               )}
-                              <ChevronDown className="h-4 w-4 text-slate-300 -rotate-90 rtl:rotate-90" />
+                              {state === 'in_progress' && !isLocked ? (
+                                <span className="flex-shrink-0 text-xs font-semibold text-blue-600">{t('course.youAreHere')}</span>
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-slate-300 -rotate-90 rtl:rotate-90" />
+                              )}
                             </button>
                           );
                         })}
@@ -443,13 +458,13 @@ export function CoursePage({
                       <button
                         onClick={() => onOpenFlashcards(courseId, module.id)}
                         disabled={isLocked}
-                        className="w-full flex items-center gap-3 px-4 py-3 border-t border-slate-100 text-start bg-teal-50/40 enabled:hover:bg-teal-50 disabled:opacity-50 transition-colors"
+                        className="w-full flex items-center gap-3 px-4 py-3 border-t border-slate-100 text-start bg-purple-50/40 enabled:hover:bg-purple-50 disabled:opacity-50 transition-colors"
                       >
-                        <div className="h-7 w-7 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
-                          <Layers className="h-3.5 w-3.5 text-teal-600" />
+                        <div className="h-7 w-7 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                          <Layers className="h-3.5 w-3.5 text-purple-600" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-teal-700">{t('cards.title')}</p>
+                          <p className="text-sm font-semibold text-purple-700">{t('cards.title')}</p>
                           <p className="text-xs text-slate-500 mt-0.5">
                             {t('cards.moduleInfo', {
                               total: cardStats.get(module.id)!.total,
@@ -459,7 +474,7 @@ export function CoursePage({
                           </p>
                         </div>
                         {cardStats.get(module.id)!.due > 0 && !isLocked && (
-                          <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-teal-500 text-white text-[11px] font-bold flex items-center justify-center tabular-nums">
+                          <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-purple-500 text-white text-[11px] font-bold flex items-center justify-center tabular-nums">
                             {cardStats.get(module.id)!.due}
                           </span>
                         )}
@@ -471,17 +486,17 @@ export function CoursePage({
                       <button
                         onClick={() => onOpenQuiz(courseId, module.id)}
                         disabled={isLocked}
-                        className="w-full flex items-center gap-3 px-4 py-3 border-t border-slate-100 text-start bg-purple-50/40 enabled:hover:bg-purple-50 disabled:opacity-50 transition-colors"
+                        className="w-full flex items-center gap-3 px-4 py-3 border-t border-slate-100 text-start bg-amber-50 enabled:hover:bg-amber-100 disabled:opacity-50 transition-colors"
                       >
-                        <div className={`h-7 w-7 rounded-full flex items-center justify-center flex-shrink-0 ${quiz.passed ? 'bg-green-500' : 'bg-purple-100'}`}>
+                        <div className={`h-7 w-7 rounded-full flex items-center justify-center flex-shrink-0 ${quiz.passed ? 'bg-green-500' : 'bg-amber-100'}`}>
                           {quiz.passed ? (
                             <Check className="h-4 w-4 text-white" strokeWidth={3} />
                           ) : (
-                            <ClipboardList className="h-3.5 w-3.5 text-purple-600" />
+                            <ClipboardList className="h-3.5 w-3.5 text-amber-700" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-purple-700">{t('quiz.title')}</p>
+                          <p className="text-sm font-semibold text-amber-800">{t('quiz.title')}</p>
                           <p className="text-xs text-slate-500 mt-0.5">
                             {quiz.passed
                               ? t('course.quizPassed', { score: quiz.best_score ?? 0, total: quiz.best_total ?? 0 })
@@ -500,23 +515,6 @@ export function CoursePage({
           })}
         </div>
 
-        {/* Deep link share info */}
-        <Card className="p-4 bg-slate-50">
-          <div className="flex items-center gap-2 text-sm text-slate-500">
-            <LinkIcon className="h-4 w-4 flex-shrink-0" />
-            <span className="truncate">{t('course.shareLink', { link: buildCourseDeepLink(course.id) })}</span>
-          </div>
-          <button
-            onClick={handleCopyLink}
-            className="mt-2 flex items-center gap-1.5 text-sm font-medium text-blue-500"
-          >
-            {linkCopied ? (
-              <><CheckIcon className="h-4 w-4" /> {t('course.copied')}</>
-            ) : (
-              <><Copy className="h-4 w-4" /> {t('course.copyLink')}</>
-            )}
-          </button>
-        </Card>
       </div>
     </div>
   );
