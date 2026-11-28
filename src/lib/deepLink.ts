@@ -16,7 +16,7 @@ export function buildCertificateVerifyLink(code: string): string {
   return `https://t.me/${BOT_USERNAME}/app?startapp=cert_${code}`;
 }
 
-export type DeepLinkTarget = { courseId: string } | { certificateCode: string };
+export type DeepLinkTarget = { courseId: string } | { certificateCode: string } | { questionLessonId: string };
 
 export function parseStartAppParam(startApp: string | null): DeepLinkTarget | null {
   if (!startApp) return null;
@@ -25,10 +25,13 @@ export function parseStartAppParam(startApp: string | null): DeepLinkTarget | nu
   // Certificate codes are 10 characters from [A-Z2-9].
   const cert = startApp.match(/^cert_([A-Za-z0-9]{6,20})$/);
   if (cert) return { certificateCode: cert[1].toUpperCase() };
+  // q_<lesson id>: from a bot message about a question; opens the lesson's questions.
+  const question = startApp.match(/^q_([0-9a-fA-F-]{36})$/);
+  if (question) return { questionLessonId: question[1].toLowerCase() };
   return null;
 }
 
-/** What the Mini App was opened for (a course or a certificate to verify), if anything. */
+/** What the Mini App was opened for (a course, a lesson's questions, a certificate to verify), if anything. */
 export function getDeepLinkTarget(): DeepLinkTarget | null {
   // Preferred: the SDK exposes the `startapp` value as start_param.
   const sdkParam = parseStartAppParam(getTelegramStartParam());

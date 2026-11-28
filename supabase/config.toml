@@ -24,3 +24,10 @@ verify_jwt = true
 # Verifies Telegram initData itself and checks course ownership.
 [functions.refresh-thumbnails]
 verify_jwt = true
+
+# Verify Telegram initData themselves (question author / course creator).
+[functions.question-notify]
+verify_jwt = true
+
+[functions.course-announce]
+verify_jwt = true

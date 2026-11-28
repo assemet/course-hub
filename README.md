@@ -67,6 +67,24 @@ Arabic switches the whole layout to RTL (`<html dir="rtl">`).
 To add or change text, add the key to **both** `en` and `ar`; TypeScript fails
 the build if a key is missing from the Arabic dictionary.
 
+## Questions and announcements
+
+- **Lesson questions:** enrolled students ask under a lesson, publicly or
+  privately (only the teacher sees private ones); the course's creator answers
+  or edits an answer. The bot tells the teacher about each new question and the
+  student about the answer, once each, with a button that opens the lesson's
+  questions (`startapp=q_<lesson id>`). Creators answer from the lesson or from
+  **Students' questions** on the dashboard (all unanswered, oldest first).
+  Writes go through `ask_question` / `answer_question` / `delete_question`;
+  20 questions a day per student.
+- **Announcements:** in the course editor, the creator writes a message the bot
+  sends to every enrolled student (with an Open the course button); the latest
+  one shows on the course page for 14 days. Published courses only, 3 a day.
+
+Deploy: run `supabase/migrations/20261128100000_011_questions_announcements.sql`,
+then `supabase functions deploy question-notify` and
+`supabase functions deploy course-announce`.
+
 ## First-run guide and file-only lessons
 
 - **Creator guide:** on the dashboard, a four-step checklist (create a course,

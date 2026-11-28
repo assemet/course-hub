@@ -6,6 +6,7 @@ import { ErrorState } from '@/components/StateViews';
 import { AppHeader } from '@/components/AppHeader';
 import { LessonMedia } from '@/components/LessonMedia';
 import { LessonThumb } from '@/components/LessonThumb';
+import { LessonQuestions } from '@/components/LessonQuestions';
 import { LinkifiedText } from '@/components/LinkifiedText';
 import { LessonListSheet } from '@/components/LessonListSheet';
 import { CourseCompleteDialog } from '@/components/CourseCompleteDialog';
@@ -46,8 +47,11 @@ export function LessonPage({
   onNavigateLesson,
   onOpenQuiz,
   onOpenCertificate,
+  focusQuestions = false,
 }: {
   courseId: string;
+  /** Opened from a bot message about a question: scroll to the questions. */
+  focusQuestions?: boolean;
   onBack: () => void;
   onNavigateLesson: (courseId: string, lessonId: string) => void;
   onOpenQuiz: (courseId: string, moduleId: string) => void;
@@ -403,6 +407,17 @@ export function LessonPage({
               })}
             </div>
           </div>
+        )}
+
+        {/* Questions to the teacher, and the answers */}
+        {user && !isLocked && (
+          <LessonQuestions
+            key={currentLesson.id}
+            lessonId={currentLesson.id}
+            userId={user.id}
+            isCreator={isCreator}
+            focus={focusQuestions}
+          />
         )}
 
         {/* Previous / next: quiet, the bottom bar holds the main action. */}

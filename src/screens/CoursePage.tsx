@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { ChevronDown, Check, BookOpen, FileText, Share2, Check as CheckIcon, Play, Trophy, Lock, ClipboardList, Award, Layers } from 'lucide-react';
 import { CourseCover } from '@/components/CourseCover';
+import { LatestAnnouncement } from '@/components/LatestAnnouncement';
 import { isRunningInTelegram, openTelegramLink } from '@/lib/telegram';
 import { Card } from '@/components/Card';
 import { ProgressBar } from '@/components/ProgressBar';
@@ -234,6 +235,8 @@ export function CoursePage({
       <div className="px-4 py-5 space-y-5">
         {/* Cover with the title on it */}
         <CourseCover course={course} heroTitle className="h-44 rounded-3xl" />
+
+        <LatestAnnouncement courseId={course.id} />
 
         <Card className="p-5">
           {course.description && (

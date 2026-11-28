@@ -26,6 +26,7 @@ import { errorMessage } from '@/lib/errors';
 import { needsThumbnail } from '@/lib/mediaService';
 import { ThumbnailRefreshCard } from '@/components/ThumbnailRefreshCard';
 import { LessonThumb } from '@/components/LessonThumb';
+import { AnnouncementsCard } from '@/components/AnnouncementsCard';
 import type { Course, ModuleWithLessons, Lesson, Resource, ResourceType } from '@/lib/types';
 
 type EditView = 'overview' | 'modules' | 'lesson';
@@ -535,6 +536,8 @@ export function CourseEditor({
         )}
         {view === 'overview' && (
           <div className="space-y-4">
+            {course && <AnnouncementsCard courseId={course.id} published={course.status === 'published'} />}
+
             <Card className="p-5 space-y-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 block mb-1.5">{t('editor.courseTitle')}</label>

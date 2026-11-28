@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, BookOpen, Users, Edit, Globe, GlobeLock, ArrowRight, FileText, Inbox, TrendingDown } from 'lucide-react';
+import { Plus, BookOpen, Users, Edit, Globe, GlobeLock, ArrowRight, FileText, Inbox, TrendingDown, MessageCircleQuestion } from 'lucide-react';
+import { countUnansweredQuestions } from '@/lib/questionService';
 import { CourseCover } from '@/components/CourseCover';
 import { OnboardingChecklist } from '@/components/OnboardingChecklist';
 import { isOnboardingDismissed, dismissOnboarding } from '@/lib/onboarding';
@@ -72,15 +73,18 @@ export function CreatorDashboard({
   onCreateCourse,
   onOpenImports,
   onOpenStudents,
+  onOpenQuestions,
 }: {
   onEditCourse: (courseId: string) => void;
   onCreateCourse: () => void;
   onOpenImports: () => void;
   onOpenStudents: (courseId: string) => void;
+  onOpenQuestions: () => void;
 }) {
   const { user } = useUser();
   const { t } = useI18n();
   const [pendingImports, setPendingImports] = useState(0);
+  const [unanswered, setUnanswered] = useState(0);
   const [onboardingDismissed, setOnboardingDismissed] = useState(isOnboardingDismissed);
   const [courses, setCourses] = useState<Course[]>([]);
   const [stats, setStats] = useState<Record<string, CourseStats>>({});
@@ -98,6 +102,8 @@ export function CreatorDashboard({
         countPendingImports(user.id).catch(() => 0),
       ]);
       setCourses(myCourses);
+      // Badge only: a failure here must not break the dashboard.
+      countUnansweredQuestions(myCourses.map((c) => c.id)).then(setUnanswered, () => setUnanswered(0));
       setPendingImports(pending);
 
       const entries = await Promise.all(
@@ -207,6 +213,28 @@ export function CreatorDashboard({
             {t('dash.inactive.action')}
           </button>
         </div>
+      )}
+
+      {courses.length > 0 && (
+        <Card className="p-4" onClick={onOpenQuestions}>
+          <div className="flex items-center gap-3">
+            <div className="relative h-11 w-11 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
+              <MessageCircleQuestion className="h-5 w-5 text-purple-600" />
+              {unanswered > 0 && (
+                <span className="absolute -top-1.5 -end-1.5 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">
+                  {unanswered > 99 ? '99+' : unanswered}
+                </span>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-900">{t('qa.inbox.title')}</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {unanswered > 0 ? t('qa.inbox.count', { n: unanswered }) : t('qa.inbox.none')}
+              </p>
+            </div>
+            <ArrowRight className="h-4 w-4 text-slate-300 flex-shrink-0 rtl:rotate-180" />
+          </div>
+        </Card>
       )}
 
       <Card className="p-4" onClick={onOpenImports}>

@@ -16,6 +16,8 @@ import { CourseStudents } from '@/screens/CourseStudents';
 import { useI18n } from '@/lib/i18n';
 import { useBackButton } from '@/hooks/useBackButton';
 import { getDeepLinkTarget } from '@/lib/deepLink';
+import { fetchLessonCourseId } from '@/lib/courseService';
+import { QuestionsInbox } from '@/screens/QuestionsInbox';
 import { QuizScreen } from '@/screens/QuizScreen';
 import { CertificateScreen } from '@/screens/CertificateScreen';
 import { VerifyCertificateScreen } from '@/screens/VerifyCertificateScreen';
@@ -25,7 +27,8 @@ import { hideSplash } from '@/lib/splash';
 type Screen =
   | { name: 'tab' }
   | { name: 'course'; courseId: string }
-  | { name: 'lesson'; courseId: string; lessonId: string }
+  | { name: 'lesson'; courseId: string; lessonId: string; focusQuestions?: boolean }
+  | { name: 'questions' }
   | { name: 'creator-dashboard' }
   | { name: 'import-inbox' }
   | { name: 'course-students'; courseId: string }
@@ -56,6 +59,16 @@ function AppContent() {
     const target = getDeepLinkTarget();
     if (target && 'courseId' in target) {
       setScreenStack([{ name: 'course', courseId: target.courseId }]);
+    } else if (target && 'questionLessonId' in target) {
+      // The lesson's questions, with its course underneath for "back".
+      const lessonId = target.questionLessonId;
+      fetchLessonCourseId(lessonId).then((courseId) => {
+        if (!courseId) return;
+        setScreenStack([
+          { name: 'course', courseId },
+          { name: 'lesson', courseId, lessonId, focusQuestions: true },
+        ]);
+      });
     } else if (target) {
       setScreenStack([{ name: 'verify-certificate', code: target.certificateCode }]);
     }
@@ -107,6 +120,7 @@ function AppContent() {
             <LessonPage
               courseId={currentScreen.courseId}
               lessonId={currentScreen.lessonId}
+              focusQuestions={currentScreen.focusQuestions}
               onBack={popScreen}
               onNavigateLesson={(courseId, lessonId) => {
                 setScreenStack((s) => [...s.slice(0, -1), { name: 'lesson', courseId, lessonId }]);
@@ -171,6 +185,15 @@ function AppContent() {
             <CourseStudents courseId={currentScreen.courseId} onBack={popScreen} />
           </div>
         );
+      case 'questions':
+        return (
+          <div className="min-h-screen bg-slate-50 max-w-lg mx-auto">
+            <QuestionsInbox
+              onBack={popScreen}
+              onOpenLesson={(courseId, lessonId) => pushScreen({ name: 'lesson', courseId, lessonId, focusQuestions: true })}
+            />
+          </div>
+        );
       case 'import-inbox':
         return (
           <div className="min-h-screen bg-slate-50 max-w-lg mx-auto">
@@ -206,6 +229,7 @@ function AppContent() {
             onCreateCourse={() => pushScreen({ name: 'course-editor', courseId: null, isNew: true })}
             onOpenImports={() => pushScreen({ name: 'import-inbox' })}
             onOpenStudents={(courseId) => pushScreen({ name: 'course-students', courseId })}
+            onOpenQuestions={() => pushScreen({ name: 'questions' })}
           />
         )}
       </div>

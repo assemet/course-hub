@@ -341,3 +341,15 @@ export async function fetchStudyStreak(userId: string): Promise<number> {
     return 0;
   }
 }
+
+/** The course a lesson belongs to (for links that name only the lesson). */
+export async function fetchLessonCourseId(lessonId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('lessons')
+    .select('module:modules(course_id)')
+    .eq('id', lessonId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const mod = (data as unknown as { module: { course_id: string } | null }).module;
+  return mod?.course_id ?? null;
+}
