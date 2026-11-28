@@ -14,6 +14,7 @@ import {
   fetchMyCertificate, issueCertificate, renderCertificate, sendCertificateToChat, classifyIssueError,
   formatCertificateCode, type Certificate, type IssueError,
 } from '@/lib/certificateService';
+import { toCertificateDesign } from '@/lib/certificateRender';
 import type { Course } from '@/lib/types';
 
 const issueErrorKeys: Record<IssueError, TKey> = {
@@ -64,7 +65,7 @@ export function CertificateScreen({ courseId, onBack }: { courseId: string; onBa
     if (!cert) return;
     let url: string | null = null;
     let cancelled = false;
-    renderCertificate(cert, lang)
+    renderCertificate(cert, lang, toCertificateDesign(course?.certificate_design))
       .then((blob) => {
         if (cancelled) return;
         url = URL.createObjectURL(blob);
@@ -75,7 +76,7 @@ export function CertificateScreen({ courseId, onBack }: { courseId: string; onBa
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [cert, lang]);
+  }, [cert, lang, course?.certificate_design]);
 
   const handleIssue = async () => {
     try {

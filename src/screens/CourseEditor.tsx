@@ -27,6 +27,8 @@ import { needsThumbnail } from '@/lib/mediaService';
 import { ThumbnailRefreshCard } from '@/components/ThumbnailRefreshCard';
 import { LessonThumb } from '@/components/LessonThumb';
 import { AnnouncementsCard } from '@/components/AnnouncementsCard';
+import { CertificateDesignPicker } from '@/components/CertificateDesignPicker';
+import { toCertificateDesign, type CertificateDesign } from '@/lib/certificateRender';
 import type { Course, ModuleWithLessons, Lesson, Resource, ResourceType } from '@/lib/types';
 
 type EditView = 'overview' | 'modules' | 'lesson';
@@ -230,6 +232,21 @@ export function CourseEditor({
       setQuizStatus(await fetchCourseQuizStatus(course.id));
     } catch {
       // keep the previous counts
+    }
+  };
+
+  // === Certificate design ===
+  const handleCertificateDesign = async (design: CertificateDesign) => {
+    if (!course) return;
+    const previous = course.certificate_design;
+    setCourse({ ...course, certificate_design: design });
+    try {
+      const { error: err } = await supabase.from('courses').update({ certificate_design: design }).eq('id', course.id);
+      if (err) throw err;
+      hapticFeedback('success');
+    } catch (err) {
+      setCourse((c) => (c ? { ...c, certificate_design: previous } : c));
+      setActionError(errorMessage(err, t('certDesign.saveFailed')));
     }
   };
 
@@ -694,6 +711,16 @@ export function CourseEditor({
                   </button>
                 </div>
               </Card>
+            )}
+
+            {course && (
+              <CertificateDesignPicker
+                value={toCertificateDesign(course.certificate_design)}
+                courseTitle={course.title}
+                creatorName={user?.first_name ?? ''}
+                lessonCount={modules.reduce((n, m) => n + m.lessons.length, 0)}
+                onChange={handleCertificateDesign}
+              />
             )}
           </div>
         )}

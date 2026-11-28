@@ -1,3 +1,4 @@
+import type { CertificateDesign } from './certificateRender';
 export type UserRole = 'student' | 'creator';
 
 export interface User {
@@ -24,6 +25,8 @@ export interface Course {
   protect_content: boolean;
   /** Next module opens only after the previous modules' quizzes are passed. */
   quiz_gating: boolean;
+  /** Certificate template; see certificateRender.ts. */
+  certificate_design: CertificateDesign;
   created_at: string;
   updated_at: string;
 }
