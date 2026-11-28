@@ -33,6 +33,25 @@ export async function loadLessonImage(lessonId: string): Promise<string> {
   return URL.createObjectURL(await response.blob());
 }
 
+// Keyed by question and file, so a replaced picture is fetched again.
+const questionImageCache = new Map<string, Promise<string>>();
+
+/** Object URL of the picture attached to a quiz question. Cached per session. */
+export function loadQuestionImage(questionId: string, imageFileId: string): Promise<string> {
+  const key = `${questionId}:${imageFileId}`;
+  let pending = questionImageCache.get(key);
+  if (!pending) {
+    pending = (async () => {
+      const response = await callMediaFunction({ question_id: questionId, action: 'view' });
+      if (!response.ok) throw new Error(await errorCode(response));
+      return URL.createObjectURL(await response.blob());
+    })();
+    pending.catch(() => questionImageCache.delete(key));
+    questionImageCache.set(key, pending);
+  }
+  return pending;
+}
+
 export type SendResult = 'sent' | 'chat_unavailable' | 'failed';
 
 /** Asks the bot to send the lesson's file to the user's own Telegram chat. */

@@ -5,13 +5,14 @@ import { AppHeader } from '@/components/AppHeader';
 import { LoadingScreen } from '@/components/Spinner';
 import { ErrorState } from '@/components/StateViews';
 import { CourseCompleteDialog } from '@/components/CourseCompleteDialog';
+import { QuestionImage } from '@/components/QuestionImage';
 import { useUser } from '@/hooks/useUser';
 import { useI18n } from '@/lib/i18n';
 import { errorMessage } from '@/lib/errors';
 import { hapticFeedback } from '@/lib/telegram';
 import { fetchCourseById, fetchModulesWithLessons, fetchLessonProgress, getAllLessonsOrdered } from '@/lib/courseService';
 import {
-  fetchCourseQuizStatus, fetchQuizQuestions, submitQuiz, hasQuiz,
+  fetchCourseQuizStatus, fetchQuizQuestions, submitQuiz, hasQuiz, optionLabel,
   type QuizQuestion, type QuizResult, type QuizStatus,
 } from '@/lib/quizService';
 import type { Course, ModuleWithLessons } from '@/lib/types';
@@ -189,7 +190,12 @@ export function QuizScreen({
             <Card key={q.id} className="p-4">
               <p className="text-xs font-semibold text-slate-400 mb-1">{t('quiz.questionN', { n: qi + 1, total: questions.length })}</p>
               <p dir="auto" className="text-sm font-semibold text-slate-900 text-start whitespace-pre-wrap">{q.question}</p>
-              <div className="mt-3 space-y-2" role="radiogroup" aria-label={q.question}>
+              {q.image_file_id && <QuestionImage questionId={q.id} imageFileId={q.image_file_id} />}
+              <div
+                className={`mt-3 ${q.kind === 'true_false' ? 'grid grid-cols-2 gap-2' : 'space-y-2'}`}
+                role="radiogroup"
+                aria-label={q.question}
+              >
                 {q.options.map((opt, oi) => {
                   const chosen = answers[qi] === oi;
                   const isCorrect = r && oi === r.correct_index;
@@ -218,7 +224,7 @@ export function QuizScreen({
                       >
                         {isCorrect ? <Check className="h-3 w-3 text-white" strokeWidth={4} /> : isWrongChoice ? <X className="h-3 w-3 text-white" strokeWidth={4} /> : chosen ? <span className="h-1.5 w-1.5 rounded-full bg-white" /> : null}
                       </span>
-                      <span dir="auto" className="flex-1">{opt}</span>
+                      <span dir="auto" className="flex-1">{optionLabel(q, opt, t)}</span>
                     </button>
                   );
                 })}

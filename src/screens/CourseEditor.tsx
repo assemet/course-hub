@@ -722,13 +722,13 @@ export function CourseEditor({
                   onChange={(e) => setModuleTitleInput(e.target.value)}
                   placeholder={t('editor.newModulePh')}
                   dir="auto"
-                  className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="flex-1 min-w-0 px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   onKeyDown={(e) => e.key === 'Enter' && handleAddModule()}
                 />
                 <button
                   onClick={handleAddModule}
                   disabled={!moduleTitleInput.trim()}
-                  className="flex items-center gap-1 px-4 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-95 disabled:opacity-50 transition-all"
+                  className="flex flex-shrink-0 items-center gap-1 px-4 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-95 disabled:opacity-50 transition-all"
                 >
                   <Plus className="h-4 w-4" />
                   {t('common.add')}

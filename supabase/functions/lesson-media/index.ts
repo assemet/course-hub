@@ -5,6 +5,8 @@
 //   action "thumb": returns the small preview image (video frame, PDF first
 //                   page, ...). Also works for Import Inbox items (`import_id`
 //                   instead of `lesson_id`), which only their creator can read.
+//                   With `question_id` instead of `lesson_id`: the picture
+//                   attached to a quiz question.
 //   action "send":  the bot sends the file to the caller's own Telegram chat.
 //                   Works for any type and size, including videos, and for
 //                   files that came from private channels.
@@ -115,11 +117,13 @@ Deno.serve(async (req: Request) => {
     const initData = typeof body?.init_data === "string" ? body.init_data : "";
     const lessonId = typeof body?.lesson_id === "string" ? body.lesson_id : "";
     const importId = typeof body?.import_id === "string" ? body.import_id : "";
+    const questionId = typeof body?.question_id === "string" ? body.question_id : "";
     const action: Action | null = ACTIONS.includes(body?.action) ? body.action : null;
-    if (!action || (!lessonId && !importId)) {
-      return json({ error: "lesson_id (or import_id) and action are required" }, 400);
+    if (!action || (!lessonId && !importId && !questionId)) {
+      return json({ error: "lesson_id (or import_id, question_id) and action are required" }, 400);
     }
     if (importId && action !== "thumb") return json({ error: "Only thumbnails are available for imports" }, 400);
+    if (questionId && action !== "view") return json({ error: "Only pictures are available for questions" }, 400);
 
     const tgUser = await verifyInitData(initData, botToken);
     if (!tgUser) return json({ error: "Invalid Telegram session" }, 401);
@@ -155,6 +159,18 @@ Deno.serve(async (req: Request) => {
       if (itemErr) throw itemErr;
       if (!item?.thumb_file_id) return json({ error: "not_found" }, 404);
       return await imageResponse(botToken, item.thumb_file_id, "image/jpeg");
+    }
+
+    // Quiz question picture: RLS lets anyone who can see the quiz read it.
+    if (questionId) {
+      const { data: question, error: questionErr } = await asUser
+        .from("quiz_questions")
+        .select("image_file_id")
+        .eq("id", questionId)
+        .maybeSingle<{ image_file_id: string | null }>();
+      if (questionErr) throw questionErr;
+      if (!question?.image_file_id) return json({ error: "not_found" }, 404);
+      return await imageResponse(botToken, question.image_file_id, "image/jpeg");
     }
 
     const { data: lesson, error: lessonErr } = await asUser

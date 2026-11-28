@@ -3,7 +3,24 @@ import type { ModuleWithLessons } from './types';
 
 // Columns students may read. `correct_index` and `explanation` are hidden by
 // column privileges; selecting `*` would fail for students.
-const PUBLIC_QUESTION_COLUMNS = 'id, quiz_id, position, question, options';
+const PUBLIC_QUESTION_COLUMNS = 'id, quiz_id, position, question, options, kind, image_file_id';
+
+/**
+ * 'choice': multiple choice. 'true_false': the options are always
+ * ['true', 'false'] and are shown in the reader's language.
+ */
+export type QuestionKind = 'choice' | 'true_false';
+export const TRUE_FALSE_OPTIONS = ['true', 'false'];
+
+/** What to show for an option: true/false options are stored as keys. */
+export function optionLabel(
+  q: { kind: QuestionKind },
+  option: string,
+  t: (key: 'quiz.true' | 'quiz.false') => string
+): string {
+  if (q.kind !== 'true_false') return option;
+  return option === 'true' ? t('quiz.true') : t('quiz.false');
+}
 
 export interface QuizQuestion {
   id: string;
@@ -11,6 +28,9 @@ export interface QuizQuestion {
   position: number;
   question: string;
   options: string[];
+  kind: QuestionKind;
+  /** Telegram file of a picture shown with the question; load it with loadQuestionImage(). */
+  image_file_id: string | null;
 }
 
 /** A question as the course owner sees it (with the answer). */
@@ -21,6 +41,8 @@ export interface EditableQuestion {
   options: string[];
   correct_index: number;
   explanation: string | null;
+  kind: QuestionKind;
+  image_file_id: string | null;
 }
 
 export interface CreatorQuiz {
@@ -143,6 +165,8 @@ export interface QuestionInput {
   options: string[];
   correct_index: number;
   explanation: string | null;
+  kind: QuestionKind;
+  image_file_id: string | null;
 }
 
 export async function addQuestion(quizId: string, position: number, input: QuestionInput): Promise<string> {

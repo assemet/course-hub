@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
-import { X, Plus, Trash2, Edit2, Check, ShieldCheck, ClipboardList } from 'lucide-react';
+import { X, Plus, Trash2, Edit2, Check, ShieldCheck, ClipboardList, ImagePlus, RefreshCw } from 'lucide-react';
 import { Card } from '@/components/Card';
-import { LoadingScreen } from '@/components/Spinner';
+import { LoadingScreen, Spinner } from '@/components/Spinner';
 import { ErrorState } from '@/components/StateViews';
+import { MediaThumb } from '@/components/MediaThumb';
+import { QuestionImage } from '@/components/QuestionImage';
 import { useI18n } from '@/lib/i18n';
 import { errorMessage } from '@/lib/errors';
 import { useBackButton } from '@/hooks/useBackButton';
-import { hapticFeedback } from '@/lib/telegram';
+import { useUser } from '@/hooks/useUser';
+import { hapticFeedback, openTelegramLink } from '@/lib/telegram';
+import { buildBotChatLink } from '@/lib/deepLink';
+import { fetchAllImports, markImportAsImported } from '@/lib/importService';
+import type { ImportedMessage } from '@/lib/types';
 import {
-  fetchCreatorQuiz, ensureQuiz, updatePassPercent, addQuestion, updateQuestion, deleteQuestion,
-  type CreatorQuiz, type EditableQuestion, type QuestionInput,
+  fetchCreatorQuiz, ensureQuiz, updatePassPercent, addQuestion, updateQuestion, deleteQuestion, optionLabel,
+  TRUE_FALSE_OPTIONS,
+  type CreatorQuiz, type EditableQuestion, type QuestionInput, type QuestionKind,
 } from '@/lib/quizService';
 
 const PASS_MARKS = [50, 60, 70, 80, 90, 100];
@@ -18,6 +25,111 @@ const MAX_OPTIONS = 6;
 
 const inputCls =
   'w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-surface text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent';
+
+/** How many recent pictures the picker offers. */
+const PICKER_LIMIT = 24;
+
+/** Recent pictures the creator sent to the bot, to attach one to a question. */
+function ImagePicker({
+  onPick,
+  onCancel,
+}: {
+  onPick: (item: ImportedMessage) => void;
+  onCancel: () => void;
+}) {
+  const { t } = useI18n();
+  const { user } = useUser();
+  const [items, setItems] = useState<ImportedMessage[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!user) return;
+    try {
+      setLoading(true);
+      setFailed(false);
+      const all = await fetchAllImports(user.id);
+      setItems(all.filter((m) => m.media_type === 'image' && m.file_id).slice(0, PICKER_LIMIT));
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <div className="rounded-xl border border-slate-200 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-slate-800">{t('quizEditor.pickImage')}</p>
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label={t('common.close')}
+          className="h-7 w-7 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <p className="mt-0.5 text-xs text-slate-500">{t('quizEditor.imageHint')}</p>
+
+      {items === null && !failed ? (
+        <div className="py-6 flex justify-center">
+          <Spinner />
+        </div>
+      ) : failed ? (
+        <p role="alert" className="mt-3 text-xs text-red-600">{t('quizEditor.imagesFailed')}</p>
+      ) : items && items.length === 0 ? (
+        <p className="mt-3 rounded-lg bg-slate-50 px-3 py-3 text-xs text-slate-500">{t('quizEditor.noImages')}</p>
+      ) : (
+        <div className="mt-3 grid grid-cols-4 gap-2">
+          {items!.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onPick(m)}
+              aria-label={m.parsed_title || m.file_name || t('quizEditor.pickImage')}
+              className="rounded-xl ring-offset-2 focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 transition-transform"
+            >
+              <MediaThumb
+                source={{ importId: m.id }}
+                mediaType="image"
+                hasThumb={!!m.thumb_file_id}
+                className="aspect-square w-full"
+              />
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 flex items-center gap-4">
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> {t('quizEditor.refresh')}
+        </button>
+        <button
+          type="button"
+          onClick={() => openTelegramLink(buildBotChatLink())}
+          className="text-xs font-semibold text-blue-600"
+        >
+          {t('inbox.openBot')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** The picture chosen for a question: the saved one, or one picked from the bot inbox. */
+type ChosenImage =
+  | { fileId: string; savedQuestionId: string }
+  | { fileId: string; item: ImportedMessage };
 
 /** Add or edit one question. */
 function QuestionForm({
@@ -30,9 +142,17 @@ function QuestionForm({
   onCancel: () => void;
 }) {
   const { t } = useI18n();
+  const initialKind: QuestionKind = initial?.kind ?? 'choice';
+  const [kind, setKind] = useState<QuestionKind>(initialKind);
   const [question, setQuestion] = useState(initial?.question ?? '');
-  const [options, setOptions] = useState<string[]>(initial?.options ?? ['', '', '']);
-  const [correct, setCorrect] = useState<number>(initial?.correct_index ?? -1);
+  // Each type keeps its own answers, so switching back and forth loses nothing.
+  const [options, setOptions] = useState<string[]>(initialKind === 'choice' && initial ? initial.options : ['', '', '']);
+  const [correct, setCorrect] = useState<number>(initialKind === 'choice' && initial ? initial.correct_index : -1);
+  const [tfCorrect, setTfCorrect] = useState<number>(initialKind === 'true_false' && initial ? initial.correct_index : -1);
+  const [image, setImage] = useState<ChosenImage | null>(
+    initial?.image_file_id ? { fileId: initial.image_file_id, savedQuestionId: initial.id } : null
+  );
+  const [picking, setPicking] = useState(false);
   const [explanation, setExplanation] = useState(initial?.explanation ?? '');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -44,20 +164,35 @@ function QuestionForm({
   };
 
   const save = async () => {
-    const cleaned = options.map((o) => o.trim());
     if (!question.trim()) return setFormError(t('quizEditor.err.question'));
-    if (cleaned.some((o) => !o)) return setFormError(t('quizEditor.err.emptyOption'));
-    if (new Set(cleaned).size !== cleaned.length) return setFormError(t('quizEditor.err.duplicate'));
-    if (correct < 0 || correct >= cleaned.length) return setFormError(t('quizEditor.err.correct'));
+    let finalOptions: string[];
+    let finalCorrect: number;
+    if (kind === 'true_false') {
+      if (tfCorrect !== 0 && tfCorrect !== 1) return setFormError(t('quizEditor.err.correct'));
+      finalOptions = TRUE_FALSE_OPTIONS;
+      finalCorrect = tfCorrect;
+    } else {
+      finalOptions = options.map((o) => o.trim());
+      if (finalOptions.some((o) => !o)) return setFormError(t('quizEditor.err.emptyOption'));
+      if (new Set(finalOptions).size !== finalOptions.length) return setFormError(t('quizEditor.err.duplicate'));
+      if (correct < 0 || correct >= finalOptions.length) return setFormError(t('quizEditor.err.correct'));
+      finalCorrect = correct;
+    }
     try {
       setSaving(true);
       setFormError(null);
       await onSave({
         question: question.trim(),
-        options: cleaned,
-        correct_index: correct,
+        options: finalOptions,
+        correct_index: finalCorrect,
         explanation: explanation.trim() || null,
+        kind,
+        image_file_id: image?.fileId ?? null,
       });
+      // A picture used here shouldn't wait in the import inbox as a lesson.
+      if (image && 'item' in image && image.item.status === 'pending') {
+        markImportAsImported(image.item.id).catch(() => {});
+      }
     } catch (err) {
       setFormError(errorMessage(err, t('quizEditor.err.save')));
       setSaving(false);
@@ -81,57 +216,152 @@ function QuestionForm({
       </div>
 
       <div>
-        <p className="text-sm font-medium text-slate-700 mb-1">{t('quizEditor.options')}</p>
-        <p className="text-xs text-slate-400 mb-2">{t('quizEditor.optionsHint')}</p>
-        <div className="space-y-2" role="radiogroup" aria-label={t('quizEditor.correctLabel')}>
-          {options.map((opt, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={correct === i}
-                aria-label={t('quizEditor.markCorrect', { n: i + 1 })}
-                onClick={() => {
-                  setCorrect(i);
-                  setFormError(null);
-                }}
-                className={`h-8 w-8 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${
-                  correct === i ? 'bg-green-500 border-green-500' : 'border-slate-300'
-                }`}
-              >
-                {correct === i && <Check className="h-4 w-4 text-white" strokeWidth={3} />}
-              </button>
-              <input
-                value={opt}
-                onChange={(e) => setOption(i, e.target.value)}
-                maxLength={200}
-                dir="auto"
-                placeholder={t('quizEditor.optionPh', { n: i + 1 })}
-                className={inputCls}
+        <p className="text-sm font-medium text-slate-700 mb-1.5">{t('quizEditor.image')}</p>
+        {picking ? (
+          <ImagePicker
+            onPick={(item) => {
+              setImage({ fileId: item.file_id!, item });
+              setPicking(false);
+              hapticFeedback('light');
+            }}
+            onCancel={() => setPicking(false)}
+          />
+        ) : image ? (
+          <div>
+            {'item' in image ? (
+              <MediaThumb
+                source={{ importId: image.item.id }}
+                mediaType="image"
+                hasThumb={!!image.item.thumb_file_id}
+                className="h-44 w-full bg-slate-100"
+                iconClassName="h-8 w-8"
+                fit="contain"
               />
-              {options.length > MIN_OPTIONS && (
-                <button
-                  type="button"
-                  onClick={() => removeOption(i)}
-                  aria-label={t('common.delete')}
-                  className="h-8 w-8 flex-shrink-0 rounded-lg flex items-center justify-center text-slate-400 hover:bg-red-50 hover:text-red-500"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+            ) : (
+              <QuestionImage questionId={image.savedQuestionId} imageFileId={image.fileId} />
+            )}
+            <div className="mt-2 flex items-center gap-4">
+              <button type="button" onClick={() => setPicking(true)} className="text-xs font-semibold text-blue-600">
+                {t('quizEditor.changeImage')}
+              </button>
+              <button type="button" onClick={() => setImage(null)} className="text-xs font-semibold text-red-600">
+                {t('quizEditor.removeImage')}
+              </button>
             </div>
-          ))}
-        </div>
-        {options.length < MAX_OPTIONS && (
+          </div>
+        ) : (
           <button
             type="button"
-            onClick={() => setOptions((o) => [...o, ''])}
-            className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-blue-600"
+            onClick={() => setPicking(true)}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-slate-300 text-slate-600 text-sm font-medium"
           >
-            <Plus className="h-3.5 w-3.5" /> {t('quizEditor.addOption')}
+            <ImagePlus className="h-4 w-4" /> {t('quizEditor.addImage')}
           </button>
         )}
       </div>
+
+      <div>
+        <p className="text-sm font-medium text-slate-700 mb-1.5">{t('quizEditor.kind')}</p>
+        <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1" role="radiogroup" aria-label={t('quizEditor.kind')}>
+          {(['choice', 'true_false'] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              role="radio"
+              aria-checked={kind === k}
+              onClick={() => {
+                setKind(k);
+                setFormError(null);
+              }}
+              className={`py-2 rounded-lg text-xs font-semibold transition-colors ${
+                kind === k ? 'bg-surface text-slate-900 shadow-sm' : 'text-slate-500'
+              }`}
+            >
+              {k === 'choice' ? t('quizEditor.kind.choice') : t('quizEditor.kind.trueFalse')}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {kind === 'true_false' ? (
+        <div>
+          <p className="text-sm font-medium text-slate-700 mb-1">{t('quizEditor.correctLabel')}</p>
+          <p className="text-xs text-slate-400 mb-2">{t('quizEditor.tfHint')}</p>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={t('quizEditor.correctLabel')}>
+            {TRUE_FALSE_OPTIONS.map((opt, i) => (
+              <button
+                key={opt}
+                type="button"
+                role="radio"
+                aria-checked={tfCorrect === i}
+                onClick={() => {
+                  setTfCorrect(i);
+                  setFormError(null);
+                }}
+                className={`flex items-center justify-center gap-2 rounded-xl border-2 py-2.5 text-sm font-semibold transition-colors ${
+                  tfCorrect === i ? 'border-green-500 bg-green-50 text-green-700' : 'border-slate-200 text-slate-600'
+                }`}
+              >
+                {tfCorrect === i && <Check className="h-4 w-4" strokeWidth={3} />}
+                {optionLabel({ kind: 'true_false' }, opt, t)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div>
+          <p className="text-sm font-medium text-slate-700 mb-1">{t('quizEditor.options')}</p>
+          <p className="text-xs text-slate-400 mb-2">{t('quizEditor.optionsHint')}</p>
+          <div className="space-y-2" role="radiogroup" aria-label={t('quizEditor.correctLabel')}>
+            {options.map((opt, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={correct === i}
+                  aria-label={t('quizEditor.markCorrect', { n: i + 1 })}
+                  onClick={() => {
+                    setCorrect(i);
+                    setFormError(null);
+                  }}
+                  className={`h-8 w-8 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${
+                    correct === i ? 'bg-green-500 border-green-500' : 'border-slate-300'
+                  }`}
+                >
+                  {correct === i && <Check className="h-4 w-4 text-white" strokeWidth={3} />}
+                </button>
+                <input
+                  value={opt}
+                  onChange={(e) => setOption(i, e.target.value)}
+                  maxLength={200}
+                  dir="auto"
+                  placeholder={t('quizEditor.optionPh', { n: i + 1 })}
+                  className={inputCls}
+                />
+                {options.length > MIN_OPTIONS && (
+                  <button
+                    type="button"
+                    onClick={() => removeOption(i)}
+                    aria-label={t('common.delete')}
+                    className="h-8 w-8 flex-shrink-0 rounded-lg flex items-center justify-center text-slate-400 hover:bg-red-50 hover:text-red-500"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          {options.length < MAX_OPTIONS && (
+            <button
+              type="button"
+              onClick={() => setOptions((o) => [...o, ''])}
+              className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-blue-600"
+            >
+              <Plus className="h-3.5 w-3.5" /> {t('quizEditor.addOption')}
+            </button>
+          )}
+        </div>
+      )}
 
       <div>
         <label htmlFor="q-expl" className="text-sm font-medium text-slate-700 block mb-1.5">{t('quizEditor.explanation')}</label>
@@ -322,7 +552,8 @@ export function QuizEditor({
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                  <ul className="mt-3 space-y-1.5">
+                  {q.image_file_id && <QuestionImage questionId={q.id} imageFileId={q.image_file_id} />}
+                  <ul className={`mt-3 ${q.kind === 'true_false' ? 'grid grid-cols-2 gap-1.5' : 'space-y-1.5'}`}>
                     {q.options.map((opt, j) => (
                       <li
                         key={j}
@@ -331,7 +562,7 @@ export function QuizEditor({
                         }`}
                       >
                         {j === q.correct_index ? <Check className="h-4 w-4 flex-shrink-0" strokeWidth={3} /> : <span className="h-4 w-4 flex-shrink-0" />}
-                        <span dir="auto" className="flex-1 text-start">{opt}</span>
+                        <span dir="auto" className="flex-1 text-start">{optionLabel(q, opt, t)}</span>
                       </li>
                     ))}
                   </ul>
