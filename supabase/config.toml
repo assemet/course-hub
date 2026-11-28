@@ -20,3 +20,7 @@ verify_jwt = true
 # Verifies Telegram initData itself and checks certificate ownership.
 [functions.certificate-send]
 verify_jwt = true
+
+# Verifies Telegram initData itself and checks course ownership.
+[functions.refresh-thumbnails]
+verify_jwt = true

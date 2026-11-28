@@ -8,9 +8,9 @@ async function callLessonMedia(lessonId: string, action: 'view' | 'send'): Promi
   return callMediaFunction({ lesson_id: lessonId, action });
 }
 
-async function callMediaFunction(params: Record<string, string>): Promise<Response> {
+async function callMediaFunction(params: Record<string, string>, fn = 'lesson-media'): Promise<Response> {
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  return fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lesson-media`, {
+  return fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fn}`, {
     method: 'POST',
     headers: {
       apikey: anonKey,
@@ -49,6 +49,36 @@ export async function sendLessonMediaToChat(lessonId: string): Promise<SendResul
 // ---------------------------------------------------------------------------
 // Thumbnails
 // ---------------------------------------------------------------------------
+
+export interface RefreshThumbsResult {
+  /** Lessons that got a preview in this call. */
+  updated: number;
+  /** Lessons whose file has no preview (checked, won't be tried again). */
+  without: number;
+  /** Lessons still to check: call again while this is above 0. */
+  remaining: number;
+}
+
+/**
+ * Recovers previews for a course's lessons that have none (imported before
+ * thumbnails were kept). The bot re-sends each file to the creator's chat and
+ * deletes it at once; see the `refresh-thumbnails` function.
+ */
+export async function refreshCourseThumbnails(courseId: string): Promise<RefreshThumbsResult> {
+  const response = await callMediaFunction({ course_id: courseId }, 'refresh-thumbnails');
+  if (!response.ok) throw new Error(await errorCode(response));
+  const data = await response.json();
+  return {
+    updated: Number(data?.updated) || 0,
+    without: Number(data?.without) || 0,
+    remaining: Number(data?.remaining) || 0,
+  };
+}
+
+/** Lessons with a file but no preview checked yet (null; "" means checked, none). */
+export function needsThumbnail(lesson: { media_file_id: string | null; media_kind: string | null; media_thumb_file_id: string | null }): boolean {
+  return !!lesson.media_file_id && !!lesson.media_kind && lesson.media_thumb_file_id === null;
+}
 
 export type ThumbSource = { lessonId: string } | { importId: string };
 

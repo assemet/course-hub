@@ -67,6 +67,20 @@ Arabic switches the whole layout to RTL (`<html dir="rtl">`).
 To add or change text, add the key to **both** `en` and `ar`; TypeScript fails
 the build if a key is missing from the Arabic dictionary.
 
+## Lesson previews
+
+Lesson lists (course page and editor) show each lesson's Telegram preview: a
+video frame, a PDF's first page, a photo. Lessons with no file get a tile in the
+course cover's colors (`src/components/LessonThumb.tsx`).
+
+Lessons imported before previews were kept have none. The editor's Modules tab
+then offers **Get previews**: the `refresh-thumbnails` function re-sends each file
+to the creator's own chat (silently, by file_id, so nothing is uploaded), keeps
+the preview's file_id from Telegram's reply and deletes the message at once.
+Files Telegram has no preview for (Word files, voice messages) are marked with
+an empty value so they aren't tried again. Deploy:
+`supabase functions deploy refresh-thumbnails`.
+
 ## Look and feel
 
 Colors come from the logo: navy text on warm neutrals, brand blue for actions,

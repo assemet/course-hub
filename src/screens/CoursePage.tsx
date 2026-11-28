@@ -24,7 +24,7 @@ import {
 import type { Course, ModuleWithLessons, LessonProgress, Enrollment, Lesson } from '@/lib/types';
 import { buildCourseDeepLink } from '@/lib/deepLink';
 import { useI18n, type TKey } from '@/lib/i18n';
-import { MediaThumb } from '@/components/MediaThumb';
+import { LessonThumb } from '@/components/LessonThumb';
 import { fetchCourseQuizStatus, hasQuiz, lockedModuleIds, type QuizStatus } from '@/lib/quizService';
 import { fetchFlashcardStats, type ModuleFlashcardStats } from '@/lib/flashcardService';
 import { formatDuration } from '@/lib/mediaService';
@@ -433,15 +433,7 @@ export function CoursePage({
                                   </p>
                                 ) : null}
                               </div>
-                              {lesson.media_type && (
-                                <MediaThumb
-                                  source={{ lessonId: lesson.id }}
-                                  mediaType={lesson.media_type}
-                                  hasThumb={!!lesson.media_thumb_file_id}
-                                  className="h-11 w-16 rounded-lg"
-                                  iconClassName="h-5 w-5"
-                                />
-                              )}
+                              <LessonThumb lesson={lesson} courseId={courseId} />
                               {state === 'in_progress' && !isLocked ? (
                                 <span className="flex-shrink-0 text-xs font-semibold text-blue-600">{t('course.youAreHere')}</span>
                               ) : (

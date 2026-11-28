@@ -1,30 +1,11 @@
 import { useState, type ReactNode } from 'react';
+import { THEMES, hash } from '@/lib/courseTheme';
 
 /**
  * A course's cover: the creator's image when there is one, otherwise a cover
  * generated from the course (brand colors and shapes picked from its id, plus
  * its initials), so every course looks distinct without any upload.
  */
-
-interface Theme {
-  bg: string;
-  shape: string;
-  text: string;
-}
-
-// Brand colors from the logo: blue/navy, violet, gold, sky.
-const THEMES: Theme[] = [
-  { bg: 'linear-gradient(135deg, #1565E0, #0B2463)', shape: '#F5A50A', text: '#FFFFFF' },
-  { bg: 'linear-gradient(135deg, #8B5CF6, #5B21B6)', shape: 'rgba(255,255,255,0.22)', text: '#FFFFFF' },
-  { bg: 'linear-gradient(135deg, #F9BC33, #D98A00)', shape: 'rgba(11,36,99,0.16)', text: '#0B2463' },
-  { bg: 'linear-gradient(135deg, #2BB5F5, #1565E0)', shape: 'rgba(255,255,255,0.28)', text: '#FFFFFF' },
-];
-
-function hash(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
 
 /** "Python Basics" -> "Py", "أساسيات بايثون" -> "أ" (Arabic letters join, so one). */
 function courseInitials(title: string): string {

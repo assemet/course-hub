@@ -23,6 +23,9 @@ import { FlashcardEditor } from '@/components/FlashcardEditor';
 import { fetchFlashcardStats, type ModuleFlashcardStats } from '@/lib/flashcardService';
 import { fetchCourseQuizStatus, type QuizStatus } from '@/lib/quizService';
 import { errorMessage } from '@/lib/errors';
+import { needsThumbnail } from '@/lib/mediaService';
+import { ThumbnailRefreshCard } from '@/components/ThumbnailRefreshCard';
+import { LessonThumb } from '@/components/LessonThumb';
 import type { Course, ModuleWithLessons, Lesson, Resource, ResourceType } from '@/lib/types';
 
 type EditView = 'overview' | 'modules' | 'lesson';
@@ -694,6 +697,19 @@ export function CourseEditor({
 
         {view === 'modules' && course && (
           <div className="space-y-4">
+            {/* Lessons imported before previews were kept */}
+            <ThumbnailRefreshCard
+              courseId={course.id}
+              missing={modules.reduce((n, m) => n + m.lessons.filter(needsThumbnail).length, 0)}
+              onDone={async () => {
+                try {
+                  setModules(await fetchModulesWithLessons(course.id));
+                } catch {
+                  // The old list stays; previews show after the next reload.
+                }
+              }}
+            />
+
             {/* Add module */}
             <Card className="p-4">
               <div className="flex gap-2">
@@ -820,7 +836,7 @@ export function CourseEditor({
                                 onClick={() => setEditingLesson({ moduleId: module.id, lesson })}
                                 className="flex-1 flex items-center gap-2 text-start min-w-0"
                               >
-                                <FileText className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                                <LessonThumb lesson={lesson} courseId={course.id} className="h-9 w-12 rounded-md" iconClassName="h-4 w-4" withDuration />
                                 <span dir="auto" className="text-sm text-slate-700 truncate text-left rtl:text-right">{lesson.title}</span>
                               </button>
                               <button

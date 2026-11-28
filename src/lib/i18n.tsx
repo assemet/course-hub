@@ -378,6 +378,16 @@ const en = {
   'editor.gating.off': 'Students move freely; quizzes count toward the certificate.',
   'editor.moduleQuiz': 'Module quiz',
   'editor.flashcards': 'Flashcards',
+  // thumbnail recovery (course editor)
+  'thumbs.title': (v: Vars) => `${enPlural(num(v), 'lesson has', 'lessons have')} no preview image`,
+  'thumbs.desc': 'Usually lessons imported earlier. The bot sends each file to your chat and deletes it right away to read its preview.',
+  'thumbs.running': 'Getting previews… messages may flash in the bot chat.',
+  'thumbs.progress': '{done} of {total}',
+  'thumbs.action': 'Get previews',
+  'thumbs.done': (v: Vars) => `Added ${enPlural(num(v), 'preview', 'previews')}`,
+  'thumbs.without': (v: Vars) => `${enPlural(num(v), 'file has', 'files have')} no preview in Telegram (e.g. Word files, voice messages).`,
+  'thumbs.err.chat': 'Open the bot and press Start, then try again.',
+  'thumbs.err.failed': 'Could not get the previews. Try again.',
 
   // flashcard editor
   'cardEditor.title': 'Flashcards',
@@ -849,6 +859,18 @@ const ar: Record<TKey, Entry> = {
   'editor.gating.off': 'يتنقل الطلاب بحرية، والاختبارات تُحتسب للشهادة.',
   'editor.moduleQuiz': 'اختبار الوحدة',
   'editor.flashcards': 'بطاقات المراجعة',
+  'thumbs.title': (v) =>
+    arPlural(num(v), { zero: 'كل الدروس لها صور مصغّرة', one: 'درس واحد بلا صورة مصغّرة', two: 'درسان بلا صورة مصغّرة', few: '{n} دروس بلا صورة مصغّرة', many: '{n} درساً بلا صورة مصغّرة', other: '{n} درس بلا صورة مصغّرة' }),
+  'thumbs.desc': 'غالباً دروس استُوردت سابقاً. يرسل البوت كل ملف إلى محادثتك ويحذفه فوراً ليقرأ صورته المصغّرة.',
+  'thumbs.running': 'جارٍ جلب الصور… قد تظهر رسائل في محادثة البوت لثوانٍ.',
+  'thumbs.progress': '{done} من {total}',
+  'thumbs.action': 'جلب الصور المصغّرة',
+  'thumbs.done': (v) =>
+    arPlural(num(v), { zero: 'لم تُضف صور جديدة', one: 'أُضيفت صورة واحدة', two: 'أُضيفت صورتان', few: 'أُضيفت {n} صور', many: 'أُضيفت {n} صورة', other: 'أُضيفت {n} صورة' }),
+  'thumbs.without': (v) =>
+    arPlural(num(v), { zero: '', one: 'ملف واحد ليس له صورة في تيليجرام (مثل ملفات Word أو الرسائل الصوتية).', two: 'ملفان ليس لهما صورة في تيليجرام (مثل ملفات Word أو الرسائل الصوتية).', few: '{n} ملفات ليس لها صورة في تيليجرام (مثل ملفات Word أو الرسائل الصوتية).', many: '{n} ملفاً ليس لها صورة في تيليجرام (مثل ملفات Word أو الرسائل الصوتية).', other: '{n} ملف ليس لها صورة في تيليجرام.' }),
+  'thumbs.err.chat': 'افتح البوت واضغط «ابدأ»، ثم حاول مجدداً.',
+  'thumbs.err.failed': 'تعذّر جلب الصور. حاول مجدداً.',
 
   'cardEditor.title': 'بطاقات المراجعة',
   'cardEditor.loadFailed': 'تعذّر تحميل البطاقات',
