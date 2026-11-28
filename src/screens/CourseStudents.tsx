@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Users, Activity, Trophy, Bell, BellRing, Check, AlertCircle, Copy, TrendingDown } from 'lucide-react';
 import { Card } from '@/components/Card';
+import { StudentsExportCard } from '@/components/StudentsExportCard';
 import { AppHeader } from '@/components/AppHeader';
 import { LoadingScreen } from '@/components/Spinner';
 import { ErrorState, EmptyState } from '@/components/StateViews';
@@ -232,6 +233,8 @@ export function CourseStudents({ courseId, onBack }: { courseId: string; onBack:
               <StatTile icon={Activity} value={groups.activeThisWeek} label={t('students.stat.active')} tint="bg-green-50 text-green-500" />
               <StatTile icon={Trophy} value={groups.completed.length} label={t('students.stat.completed')} tint="bg-amber-50 text-amber-500" />
             </div>
+
+            <StudentsExportCard courseId={courseId} />
 
             {/* Filters */}
             <div className="flex gap-2 overflow-x-auto -mx-4 px-4" role="tablist">

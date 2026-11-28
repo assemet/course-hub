@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getTelegramInitData } from './telegram';
 
 /** One enrolled student, as returned by the creator_course_students() function. */
 export interface CourseStudent {
@@ -45,4 +46,31 @@ export function isInactive(student: CourseStudent, now = Date.now()): boolean {
 
 export function remindedRecently(student: CourseStudent, now = Date.now()): boolean {
   return !!student.last_reminded_at && now - new Date(student.last_reminded_at).getTime() < REMINDER_COOLDOWN_HOURS * HOUR;
+}
+
+export type ExportResult = 'sent' | 'chat_unavailable' | 'failed';
+
+/**
+ * The bot sends the creator an Excel file with the course's students, their
+ * progress, quiz results and certificates (see the `students-export` function).
+ */
+export async function exportStudentsToChat(courseId: string): Promise<ExportResult> {
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  try {
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/students-export`, {
+      method: 'POST',
+      headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        init_data: getTelegramInitData(),
+        course_id: courseId,
+        // Excel dates have no time zone: write them in the creator's local time.
+        tz_offset_minutes: -new Date().getTimezoneOffset(),
+      }),
+    });
+    if (response.ok) return 'sent';
+    const data = await response.json().catch(() => ({}));
+    return data?.error === 'chat_unavailable' ? 'chat_unavailable' : 'failed';
+  } catch {
+    return 'failed';
+  }
 }

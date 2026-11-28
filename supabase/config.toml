@@ -31,3 +31,6 @@ verify_jwt = true
 
 [functions.course-announce]
 verify_jwt = true
+
+[functions.students-export]
+verify_jwt = true
