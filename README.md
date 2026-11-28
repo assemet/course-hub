@@ -67,6 +67,18 @@ Arabic switches the whole layout to RTL (`<html dir="rtl">`).
 To add or change text, add the key to **both** `en` and `ar`; TypeScript fails
 the build if a key is missing from the Arabic dictionary.
 
+## First-run guide and file-only lessons
+
+- **Creator guide:** on the dashboard, a four-step checklist (create a course,
+  forward posts to the bot, import them, publish and share) that ticks itself
+  from the creator's data and hides when done or closed (per device).
+- **File-only lessons** (most imports: a video with no text) show how to study
+  them (get the file in the chat, watch, come back and mark complete), the next
+  lesson, and, for the course's creator, a nudge to add a written summary.
+- **Font:** IBM Plex Sans Arabic is served from `public/fonts` (SIL OFL, see
+  `public/fonts/OFL.txt`), not Google Fonts; the Arabic weights the first screen
+  uses are preloaded in `index.html`.
+
 ## Lesson previews
 
 Lesson lists (course page and editor) show each lesson's Telegram preview: a

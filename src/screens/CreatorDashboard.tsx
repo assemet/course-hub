@@ -1,6 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, BookOpen, Users, Edit, Globe, GlobeLock, ArrowRight, FileText, Inbox, TrendingDown } from 'lucide-react';
 import { CourseCover } from '@/components/CourseCover';
+import { OnboardingChecklist } from '@/components/OnboardingChecklist';
+import { isOnboardingDismissed, dismissOnboarding } from '@/lib/onboarding';
+import { buildBotChatLink } from '@/lib/deepLink';
+import { openTelegramLink } from '@/lib/telegram';
 import { fetchCourseStudents, isInactive, type CourseStudent } from '@/lib/insightsService';
 import { Card } from '@/components/Card';
 import { LoadingScreen } from '@/components/Spinner';
@@ -77,6 +81,7 @@ export function CreatorDashboard({
   const { user } = useUser();
   const { t } = useI18n();
   const [pendingImports, setPendingImports] = useState(0);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(isOnboardingDismissed);
   const [courses, setCourses] = useState<Course[]>([]);
   const [stats, setStats] = useState<Record<string, CourseStats>>({});
   const [loading, setLoading] = useState(true);
@@ -125,6 +130,14 @@ export function CreatorDashboard({
 
   const totals = summarize(courses, stats);
   const hasStudentData = courses.some((c) => stats[c.id]?.students);
+  const hasLessons = courses.some((c) => (stats[c.id]?.lessonCount ?? 0) > 0);
+  const onboarding = {
+    hasCourse: courses.length > 0,
+    hasImports: pendingImports > 0 || hasLessons,
+    hasLessons,
+    hasPublished: courses.some((c) => c.status === 'published' && (stats[c.id]?.lessonCount ?? 0) > 0),
+  };
+  const showOnboarding = !onboardingDismissed && !Object.values(onboarding).every(Boolean);
 
   return (
     <div className="px-4 py-5 space-y-5">
@@ -142,7 +155,26 @@ export function CreatorDashboard({
         </button>
       </div>
 
-      {courses.length > 0 && hasStudentData && (
+      {showOnboarding && (
+        <OnboardingChecklist
+          progress={onboarding}
+          onCreateCourse={onCreateCourse}
+          onOpenBot={() => openTelegramLink(buildBotChatLink())}
+          onOpenImports={onOpenImports}
+          // The course to publish: one with lessons if there is one.
+          onOpenCourse={() => {
+            const target = courses.find((c) => (stats[c.id]?.lessonCount ?? 0) > 0) ?? courses[0];
+            if (target) onEditCourse(target.id);
+          }}
+          onDismiss={() => {
+            dismissOnboarding();
+            setOnboardingDismissed(true);
+          }}
+        />
+      )}
+
+      {/* Only once there are students: a row of zeros is noise while setting up. */}
+      {hasStudentData && totals.students > 0 && (
         <div className="grid grid-cols-3 gap-2.5">
           <div className="rounded-[18px] bg-[#0B2463] dark:bg-[#172B63] px-3 py-3.5 text-white">
             <p className="text-2xl font-bold tabular-nums">{totals.students}</p>
@@ -196,7 +228,7 @@ export function CreatorDashboard({
       </Card>
 
       {courses.length === 0 ? (
-        <EmptyState
+        showOnboarding ? null : <EmptyState
           title={t('dash.empty.title')}
           description={t('dash.empty.desc')}
           icon={<BookOpen className="h-7 w-7 text-slate-400" />}

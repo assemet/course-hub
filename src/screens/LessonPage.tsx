@@ -5,6 +5,7 @@ import { LoadingScreen } from '@/components/Spinner';
 import { ErrorState } from '@/components/StateViews';
 import { AppHeader } from '@/components/AppHeader';
 import { LessonMedia } from '@/components/LessonMedia';
+import { LessonThumb } from '@/components/LessonThumb';
 import { LinkifiedText } from '@/components/LinkifiedText';
 import { LessonListSheet } from '@/components/LessonListSheet';
 import { CourseCompleteDialog } from '@/components/CourseCompleteDialog';
@@ -236,6 +237,16 @@ export function LessonPage({
     return null;
   })();
 
+  // A lesson that is only a file: no written text to read on the page.
+  const mediaType = currentLesson.media_file_id ? currentLesson.media_type : null;
+  const fileOnly = !!mediaType && mediaType !== 'image' && !currentLesson.content?.trim();
+  const isCreator = !!course && course.creator_id === user?.id;
+  const guideSteps = [
+    t(mediaType === 'video' ? 'lesson.guide.video1' : mediaType === 'audio' ? 'lesson.guide.audio1' : 'lesson.guide.file1'),
+    t(mediaType === 'video' ? 'lesson.guide.video2' : mediaType === 'audio' ? 'lesson.guide.audio2' : 'lesson.guide.file2'),
+    t('lesson.guide.done', { button: t('lesson.markComplete') }),
+  ];
+
   return (
     <div className="min-h-screen bg-surface">
       <AppHeader
@@ -278,7 +289,46 @@ export function LessonPage({
         </div>
 
         {/* Attached Telegram file (image inline, other files sent to the chat) */}
-        <LessonMedia key={currentLesson.id} lesson={currentLesson} protect={course?.protect_content !== false} />
+        <LessonMedia
+          key={currentLesson.id}
+          lesson={currentLesson}
+          protect={course?.protect_content !== false}
+          // The guide below explains the same steps when the lesson is only a file.
+          showHint={!fileOnly}
+        />
+
+        {/* A lesson that is only a file (most imports): say how to study it, and what comes next. */}
+        {fileOnly && (
+          <section aria-labelledby="lesson-guide" className="rounded-2xl bg-slate-50 p-4">
+            <h2 id="lesson-guide" className="text-sm font-bold text-slate-900">{t('lesson.guide.title')}</h2>
+            <ol className="mt-3 space-y-3">
+              {guideSteps.map((step, i) => (
+                <li key={i} className="flex items-start gap-3">
+                  <span className="h-6 w-6 rounded-full bg-surface text-blue-600 text-xs font-bold flex items-center justify-center flex-shrink-0 shadow-sm">
+                    {i + 1}
+                  </span>
+                  <p className="text-sm leading-relaxed text-slate-700 pt-0.5">{step}</p>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+        {fileOnly && isCreator && (
+          <p className="rounded-2xl bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900">{t('lesson.creatorHint')}</p>
+        )}
+        {fileOnly && nextLesson && !isLocked && (
+          <button
+            onClick={() => handleNavigate(nextLesson.id)}
+            className="w-full flex items-center gap-3 rounded-2xl border border-slate-200 p-3 text-start active:scale-[0.99] transition-transform"
+          >
+            <LessonThumb lesson={nextLesson} courseId={courseId} className="h-12 w-[68px] rounded-xl" withDuration />
+            <span className="flex-1 min-w-0">
+              <span className="block text-xs text-slate-500">{t('lesson.upNext')}</span>
+              <span dir="auto" className="block text-sm font-semibold text-slate-900 truncate text-start">{nextLesson.title}</span>
+            </span>
+            <ChevronLeft className="h-4 w-4 text-slate-400 flex-shrink-0 ltr:rotate-180" />
+          </button>
+        )}
 
         {/* Telegram content link */}
         {currentLesson.telegram_url && (

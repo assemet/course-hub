@@ -180,7 +180,7 @@ function LessonImage({ lesson, protect }: { lesson: Lesson; protect: boolean }) 
   );
 }
 
-function LessonFile({ lesson, protect, note }: { lesson: Lesson; protect: boolean; note?: string }) {
+function LessonFile({ lesson, protect, note, showHint = true }: { lesson: Lesson; protect: boolean; note?: string; showHint?: boolean }) {
   const { t } = useI18n();
   const { state, send } = useSendToChat(lesson.id);
   const type = lesson.media_type ?? 'file';
@@ -238,19 +238,27 @@ function LessonFile({ lesson, protect, note }: { lesson: Lesson; protect: boolea
         </div>
       </div>
       {note && <p className="text-xs text-slate-400 mt-3">{note}</p>}
-      <p className="text-xs text-slate-500 mt-3 mb-3">
-        {protect ? t('lessonMedia.hintProtected') : t('lessonMedia.hint')}
-      </p>
-      <SendButton state={state} onSend={send} label={t('lessonMedia.sendToChat')} />
+      {showHint ? (
+        <p className="text-xs text-slate-500 mt-3 mb-3">
+          {protect ? t('lessonMedia.hintProtected') : t('lessonMedia.hint')}
+        </p>
+      ) : (
+        <div className="h-3" />
+      )}
+      <SendButton
+        state={state}
+        onSend={send}
+        label={t(type === 'video' ? 'lessonMedia.watch' : type === 'audio' ? 'lessonMedia.listen' : 'lessonMedia.open')}
+      />
       <SendStatus state={state} />
     </Card>
   );
 }
 
 /** The Telegram file attached to a lesson, if any. */
-export function LessonMedia({ lesson, protect }: { lesson: Lesson; protect: boolean }) {
+export function LessonMedia({ lesson, protect, showHint = true }: { lesson: Lesson; protect: boolean; showHint?: boolean }) {
   if (!lesson.media_file_id || !lesson.media_type) return null;
   return lesson.media_type === 'image'
     ? <LessonImage lesson={lesson} protect={protect} />
-    : <LessonFile lesson={lesson} protect={protect} />;
+    : <LessonFile lesson={lesson} protect={protect} showHint={showHint} />;
 }
